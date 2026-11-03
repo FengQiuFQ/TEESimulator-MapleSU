@@ -1,0 +1,10 @@
+# 仓库所有者
+* @FengQiuFQ
+
+# 目录级 owner（可按需扩展）
+/docs/          @FengQiuFQ
+/module/        @FengQiuFQ
+/dex/           @FengQiuFQ
+/native/        @FengQiuFQ
+/tools/         @FengQiuFQ
+/.github/       @FengQiuFQ

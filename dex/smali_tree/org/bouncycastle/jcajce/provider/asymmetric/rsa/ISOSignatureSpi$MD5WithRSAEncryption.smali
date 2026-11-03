@@ -1,0 +1,22 @@
+.class public Lorg/bouncycastle/jcajce/provider/asymmetric/rsa/ISOSignatureSpi$MD5WithRSAEncryption;
+.super Lorg/bouncycastle/jcajce/provider/asymmetric/rsa/ISOSignatureSpi;
+
+
+# direct methods
+.method public constructor <init>()V
+    .registers 3
+
+    sget v0, Lj1/a;->a:I
+
+    new-instance v0, Ls0/r;
+
+    invoke-direct {v0}, Ls0/r;-><init>()V
+
+    new-instance v1, Lv0/z;
+
+    invoke-direct {v1}, Lv0/z;-><init>()V
+
+    invoke-direct {p0, v0, v1}, Lorg/bouncycastle/jcajce/provider/asymmetric/rsa/ISOSignatureSpi;-><init>(Lorg/bouncycastle/crypto/v;Lorg/bouncycastle/crypto/a;)V
+
+    return-void
+.end method

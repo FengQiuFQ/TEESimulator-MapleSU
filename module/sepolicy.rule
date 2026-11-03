@@ -1,0 +1,55 @@
+allow keystore {adb_data_file shell_data_file} file *
+allow crash_dump keystore process *
+
+# SOTER Layer-A (10.C): ptrace inject into soterserver (platform_app). The debug NDJSON
+# media_rw_data_file grant is debug-only — appended for debug builds in app/build.gradle.kts.
+allow crash_dump platform_app process *
+
+allow ksu self:tcp_socket { create connect read write getopt setopt }
+allow ksu node:tcp_socket node_bind
+allow ksu port:tcp_socket name_connect
+allow magisk self:tcp_socket { create connect read write getopt setopt }
+allow magisk node:tcp_socket node_bind
+allow magisk port:tcp_socket name_connect
+
+allow ksu self:udp_socket { create connect read write getopt setopt }
+allow ksu node:udp_socket node_bind
+allow ksu port:udp_socket name_connect
+allow magisk self:udp_socket { create connect read write getopt setopt }
+allow magisk node:udp_socket node_bind
+allow magisk port:udp_socket name_connect
+
+# ---------------------------------------------------------------------------
+# KernelSU: the module's supervisor/inject run inside the KernelSU root domain
+# (u:r:su:s0) and must attach to keystore2 (and soterserver) to install the
+# binder hook. Some root solutions perform this step themselves;
+# under plain KernelSU the script is the caller, so the two ptrace grants below
+# are the minimum that makes injection possible. They are only loaded when the
+# host applies module sepolicy (KernelSU does; MapleSU Pro does not).
+# ---------------------------------------------------------------------------
+allow su keystore process *
+allow su platform_app process *
+allow ksu magisk process *
+
+# ptrace injection also writes /proc/<pid>/mem and passes the target's fds around.
+allow su proc:file { open read write getattr };
+allow su keystore:fd use;
+allow su platform_app:fd use;
+
+# Soter lane: saterserver (platform_app) must map the injected/staged library.
+# Without this the injector attaches but dlopen fails: "phdr mmap failed:
+# Permission denied" -> no Soter forge at all.
+allow platform_app {adb_data_file shell_data_file} file *
+
+# KernelSU / Magisk root domains: the daemon and the injector run in these
+# domains, not in "su". On ROMs where the root domain is enforcing (many
+# vendor builds) the ptrace/dlopen below is denied without these grants,
+# which is exactly the "installs fine but nothing happens" case.
+allow ksu keystore process *
+allow ksu platform_app process *
+allow magisk keystore process *
+allow magisk platform_app process *
+allow ksu proc:file { open read write getattr }
+allow magisk proc:file { open read write getattr }
+allow ksu keystore:fd use
+allow magisk keystore:fd use

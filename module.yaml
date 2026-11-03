@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/KernelSU-Modules/tools/main/schemas/module.schema.json
+schemaVersion: 1
+id: tricky_store
+name: TEESimulator-MapleSU
+summary: Standalone Key Attestation and Soter compatibility layer for rooted Android
+description: README.md
+license: GPL-3.0
+homepage: https://github.com/FengQiuFQ/TEESimulator-MapleSU
+support: https://github.com/FengQiuFQ/TEESimulator-MapleSU/issues
+tags: [system, cryptography, attestation, keystore, keymint, integrity, soter]
+metamodule: false
+
+authors:
+  - name: 枫秋（FengQiuFQ）
+    url: https://github.com/FengQiuFQ
+
+contributors:
+  - name: 知秋
+    url: https://github.com/947409161
+
+compatibility:
+  androidMinApi: 29
+  architectures:
+    - arm64-v8a
+
+release:
+  assetPattern: "TEESimulator-RS_MapleSU-*.zip"

@@ -1,0 +1,16 @@
+.class public Lorg/bouncycastle/jcajce/provider/asymmetric/ec/KeyFactorySpi$ECGOST3410_2012;
+.super Lorg/bouncycastle/jcajce/provider/asymmetric/ec/KeyFactorySpi;
+
+
+# direct methods
+.method public constructor <init>()V
+    .registers 3
+
+    const-string v0, "ECGOST3410-2012"
+
+    sget-object v1, Lorg/bouncycastle/jce/provider/BouncyCastleProvider;->CONFIGURATION:Lorg/bouncycastle/jcajce/provider/config/ProviderConfiguration;
+
+    invoke-direct {p0, v0, v1}, Lorg/bouncycastle/jcajce/provider/asymmetric/ec/KeyFactorySpi;-><init>(Ljava/lang/String;Lorg/bouncycastle/jcajce/provider/config/ProviderConfiguration;)V
+
+    return-void
+.end method

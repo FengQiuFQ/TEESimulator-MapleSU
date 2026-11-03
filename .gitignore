@@ -1,0 +1,11 @@
+dist/
+out/
+*.dex
+!dex/classes_p16.dex
+*.so
+*.zip
+keybox.xml
+*.log
+.gradle/
+build/
+node_modules/

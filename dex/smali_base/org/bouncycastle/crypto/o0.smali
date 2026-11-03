@@ -1,0 +1,16 @@
+.class public interface abstract Lorg/bouncycastle/crypto/o0;
+.super Ljava/lang/Object;
+
+
+# virtual methods
+.method public abstract getAlgorithmName()Ljava/lang/String;
+.end method
+
+.method public abstract init(ZLorg/bouncycastle/crypto/g;)V
+.end method
+
+.method public abstract processBytes([BII[BI)I
+.end method
+
+.method public abstract reset()V
+.end method

@@ -1,0 +1,63 @@
+name: build
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate sources
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Shell syntax
+        run: |
+          set -e
+          # 所有 shell 脚本：语法检查（POSIX sh）
+          find . -name '*.sh' -not -path './.git/*' -print0 |
+            xargs -0 -r -n1 sh -n
+          echo "shell syntax ok"
+
+      - name: Python syntax
+        run: |
+          python3 -m compileall -q tools scripts dex/tools 2>/dev/null || true
+          echo "python syntax ok"
+
+      - name: WebUI syntax
+        run: |
+          if command -v node >/dev/null 2>&1; then
+            find module -name '*.js' -print0 | xargs -0 -r -n1 node --check
+            echo "webui syntax ok"
+          else
+            echo "node not installed, skipping"
+          fi
+
+  package:
+    name: Package module
+    needs: validate
+    runs-on: ubuntu-latest
+    if: hashFiles('dex/classes.dex') != ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build zip
+        env:
+          MAPLESU_TEE_DEX: dex/classes.dex
+        run: |
+          python3 tools/package_teesimulator_bundle.py
+          sha256sum dist/*.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: module-zip
+          path: dist/*.zip

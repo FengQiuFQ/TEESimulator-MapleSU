@@ -1,0 +1,65 @@
+name: Bug report
+description: 报告一个可复现的问题
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请先阅读 [FAQ](../blob/main/docs/FAQ.md)。
+        **不要**在报告里粘贴设备序列号、账号信息、keybox 或完整 logcat。
+  - type: input
+    id: version
+    attributes:
+      label: 模块版本
+      placeholder: "6.0.24_MapleSU / 62400"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: 设备与系统
+      placeholder: "机型 / Android 版本 / 内核 / Root 方案"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: status
+    attributes:
+      label: ksu_status（已裁剪）
+      render: text
+  - type: textarea
+    id: logs
+    attributes:
+      label: 相关日志（已裁剪）
+      description: '`logcat -s TEESimulator MPL-SOTER`，只保留相关行'
+      render: text
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 确认
+      options:
+        - label: 我使用的是最新 Release
+          required: true
+        - label: 我已阅读 FAQ 并搜索过已有 Issue
+          required: true

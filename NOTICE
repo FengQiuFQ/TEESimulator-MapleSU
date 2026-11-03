@@ -1,0 +1,52 @@
+TEESimulator-MapleSU
+Copyright (C) 2026 枫秋 (FengQiuFQ) and contributors
+
+This program is free software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software Foundation,
+either version 3 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this
+program. If not, see <https://www.gnu.org/licenses/>.
+
+--------------------------------------------------------------------------
+Upstream notices
+--------------------------------------------------------------------------
+
+TEESimulator-RS
+Copyright (C) Enginex0 and contributors
+License: GNU General Public License v3.0
+Source:  https://github.com/Enginex0/TEESimulator-RS
+
+TEESimulator
+Copyright (C) JingMatrix and contributors
+License: GNU General Public License v3.0
+Source:  https://github.com/JingMatrix/TEESimulator
+
+D-Soter
+Copyright (C) ajfkdk and contributors
+License: Apache License 2.0
+Source:  https://github.com/ajfkdk/D-soter
+Note:    design reference only; no source code is included in this project.
+
+OhMyKeymint
+Copyright (C) qwq233 and contributors
+License: custom, non-commercial (not compatible with this project's license)
+Source:  https://github.com/qwq233/OhMyKeymint
+Note:    public design reference only; no source code is included in this project.
+
+--------------------------------------------------------------------------
+Third-party components
+--------------------------------------------------------------------------
+
+This project builds on Android Open Source Project interfaces and libraries,
+including but not limited to:
+  - Android KeyMint / Keymaster AIDL definitions (Apache-2.0)
+  - Bouncy Castle (MIT-style licence) for certificate handling
+  - BoringSSL (OpenSSL licence) where applicable
+
+No proprietary components from any root solution or vendor are distributed in this
+repository. The module does not ship any keybox or private key material.

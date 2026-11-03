@@ -1,0 +1,22 @@
+.class public Lorg/bouncycastle/jcajce/provider/symmetric/RC5$AlgParams;
+.super Lorg/bouncycastle/jcajce/provider/symmetric/util/IvAlgorithmParameters;
+
+
+# direct methods
+.method public constructor <init>()V
+    .registers 1
+
+    invoke-direct {p0}, Lorg/bouncycastle/jcajce/provider/symmetric/util/IvAlgorithmParameters;-><init>()V
+
+    return-void
+.end method
+
+
+# virtual methods
+.method public engineToString()Ljava/lang/String;
+    .registers 1
+
+    const-string p0, "RC5 IV"
+
+    return-object p0
+.end method

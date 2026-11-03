@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 使用问题 / 安装排障
+    url: https://github.com/FengQiuFQ/TEESimulator-MapleSU/blob/main/docs/FAQ.md
+    about: 先看 FAQ，再决定是否提 Issue
+  - name: 安全问题
+    url: https://github.com/FengQiuFQ/TEESimulator-MapleSU/security/advisories/new
+    about: 请通过私密安全公告报告，不要公开 Issue
