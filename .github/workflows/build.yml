@@ -21,7 +21,7 @@ jobs:
         run: |
           set -e
           find . -name '*.sh' -not -path './.git/*' -print0 |
-            xargs -0 -r -n1 sh -n
+            xargs -0 -r -n1 bash -n
           echo "shell syntax ok"
 
       - name: Python syntax
