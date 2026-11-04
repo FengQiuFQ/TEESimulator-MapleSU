@@ -69,6 +69,37 @@ public final class UsagePolicy {
      * before every cached {@code KeyEntryResponse} is turned into a reply, and it carries
      * both the uid and either the alias or a {@code keyid:<nspace>} marker.
      */
+
+
+    /** Hidden KeyMetadata carries the leaf in "certificate"; read it reflectively. */
+    private static byte[] leafOf(Object metadata) {
+        try {
+            java.lang.reflect.Field field = metadata.getClass().getField("certificate");
+            Object value = field.get(metadata);
+            return (value instanceof byte[]) ? (byte[]) value : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    /** First 8 hex chars of SHA-256, or "null"/"err". */
+    private static String leafHash(byte[] leaf) {
+        if (leaf == null) {
+            return "null";
+        }
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(leaf);
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < 4 && i < digest.length; i++) {
+                sb.append(String.format("%02x", digest[i] & 0xff));
+            }
+            return sb.toString();
+        } catch (Throwable t) {
+            return "err";
+        }
+    }
+
     public static void adjustResponse(KeyEntryResponse response, int uid, String alias) {
         if (response == null) {
             return;
@@ -82,6 +113,9 @@ public final class UsagePolicy {
             name = null; // key-id addressed: no alias in this leg
         }
         try {
+            // H03 evidence: the same KEY_ID must serve the same leaf DER every time.
+            android.util.Log.i("MPL-KEY", "serve uid=" + uid + " alias=" + name
+                    + " leaf=" + leafHash(leafOf(metadata)));
             Authorization[] before = metadata.authorizations;
             Authorization[] after = adjust0(before, uid, name, "serve");
             if (after != before) {

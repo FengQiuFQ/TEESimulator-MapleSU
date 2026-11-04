@@ -564,7 +564,25 @@ keybox_reload() {
     keyboxes_json
 }
 
+
+# Rewrite the keybox= line of ksu_status so the file reflects the current state, not
+# the boot-time snapshot. Only that line is touched; the rest of the record is boot data.
+sync_keybox_status() {
+    [ -f "$KSU_STATUS" ] || return 0
+    if keybox_installed; then _want=ok; else _want=missing; fi
+    _cur=$(sed -n 's/^keybox=//p' "$KSU_STATUS" 2>/dev/null | sed -n '1p')
+    [ "$_cur" = "$_want" ] && return 0
+    _tmp="$KSU_STATUS.$$"
+    sed "s/^keybox=.*/keybox=$_want/" "$KSU_STATUS" > "$_tmp" 2>/dev/null || {
+        rm -f "$_tmp" 2>/dev/null
+        return 0
+    }
+    mv -f "$_tmp" "$KSU_STATUS" 2>/dev/null
+    return 0
+}
+
 keyboxes_json() {
+    sync_keybox_status
     _cur=$(keybox_current)
     _act=$(keybox_active_id)
     _src_sha=$(sha256_file "$KEYBOX_XML_SRC" 2>/dev/null) || _src_sha=
@@ -1443,6 +1461,16 @@ cmd_logs() {
         getprop ro.build.version.sdk; getprop ro.product.cpu.abi
         printf '\n[ksu_status]\n'; cat "$CONFIG_DIR/ksu_status" 2>/dev/null
         printf '\n[soter_route]\n'; cat "$CONFIG_DIR/soter_route" 2>/dev/null
+        printf '\n[keybox live]\n'
+        if keybox_installed; then
+            printf 'installed=yes size=%s sha=%s\n' \
+                "$(wc -c < "$KEYBOX_XML_DST" 2>/dev/null | tr -d ' ')" \
+                "$(short_sha "$(sha256_file "$KEYBOX_XML_DST" 2>/dev/null)" 2>/dev/null)"
+        else
+            printf 'installed=no (probe: exists=%s size=%s)\n' \
+                "$([ -e "$KEYBOX_XML_DST" ] && echo yes || echo no)" \
+                "$(wc -c < "$KEYBOX_XML_DST" 2>/dev/null | tr -d ' ' || echo 0)"
+        fi
         printf '\n[targets]\n'; grep -vc '^#' "$CONFIG_DIR/target.txt" 2>/dev/null
         printf '\n[target_refresh]\n'; cat "$CONFIG_DIR/target_refresh" 2>/dev/null
         printf '\n[auto_third_app]\n'; read_flag "$AUTO_THIRD_FLAG" 1
