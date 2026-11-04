@@ -551,6 +551,19 @@ keybox_active_id() {
     printf 'custom'
 }
 
+
+# Touch keybox.xml so the daemon's configuration watcher re-reads it, then report
+# the state the backend sees right now.
+keybox_reload() {
+    if [ ! -s "$KEYBOX_XML_DST" ]; then
+        err_json 'keybox_missing'
+        return
+    fi
+    touch "$KEYBOX_XML_DST" 2>/dev/null || { err_json 'touch_failed'; return; }
+    log_line 'keybox_reload'
+    keyboxes_json
+}
+
 keyboxes_json() {
     _cur=$(keybox_current)
     _act=$(keybox_active_id)
@@ -1530,7 +1543,7 @@ cmd_info() {
         _kb_short=unknown
     fi
     _soter=$(get_soter)
-    printf '{"module":"TEESimulator-RS","version":"%s","author":"%s","dex_sha256":"%s","dex_short":"%s","keybox_short":"%s","keybox_current":"%s","keybox_active":"%s","soter_forge":%s,"build":"%s","mode":"ksu","backend":"ksu","features":["info","get soter","set soter","get soter_certs","set soter_certs","get hide_bootloader","set hide_bootloader","get auto_third_app","set auto_third_app","get patch","set patch","keyboxes","keybox_set","kbu_status","kbu_config","kbu_now","scope list","scope set","scope setall","targets","get debug","set debug","logs","target-watch","kbu-tick"],"unsupported":["get fix_tee","set fix_tee"],"features_note":"target.txt accepts both prefix (!pkg/?pkg, dex) and suffix (pkg!/pkg?, upstream) markers"}\n' \
+    printf '{"module":"TEESimulator-RS","version":"%s","author":"%s","dex_sha256":"%s","dex_short":"%s","keybox_short":"%s","keybox_current":"%s","keybox_active":"%s","soter_forge":%s,"build":"%s","mode":"ksu","backend":"ksu","features":["info","get soter","set soter","get soter_certs","set soter_certs","get hide_bootloader","set hide_bootloader","get auto_third_app","set auto_third_app","get patch","set patch","keyboxes","keybox_set","keybox_reload","kbu_status","kbu_config","kbu_now","scope list","scope set","scope setall","targets","get debug","set debug","logs","target-watch","kbu-tick"],"unsupported":["get fix_tee","set fix_tee"],"features_note":"target.txt accepts both prefix (!pkg/?pkg, dex) and suffix (pkg!/pkg?, upstream) markers"}\n' \
         "$(json_escape "$_ver")" "$(json_escape "$MOD_AUTHOR")" \
         "$_dex_sha" "$_dex_short" "$_kb_short" \
         "$(json_escape "$_cur")" "$(json_escape "$_act")" \
@@ -1589,6 +1602,9 @@ case $CMD in
         ;;
     keyboxes)
         keyboxes_json
+        ;;
+    keybox_reload)
+        keybox_reload
         ;;
     keybox_set)
         keybox_set "${1:-}"

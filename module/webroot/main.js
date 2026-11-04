@@ -433,6 +433,17 @@ async function loadKeyboxes() {
             if (it.id === data.current) opt.selected = true;
             UI.keyboxSelect.appendChild(opt);
         });
+        const available = items.filter((it) => it.available !== false);
+        /* A custom keybox is not a "built-in candidate", so the list would only
+           contain an unavailable entry. Show what is actually in use instead. */
+        if (data.installed && !available.length) {
+            UI.keyboxSelect.innerHTML = "";
+            const option = document.createElement("option");
+            option.value = "custom-active";
+            option.textContent = "自定义 KeyBox（当前生效）";
+            option.selected = true;
+            UI.keyboxSelect.appendChild(option);
+        }
         const activeName = data.active_name || data.current_name || "未知";
         text(UI.keyboxActive, activeName);
         text(UI.keyboxSha, data.active_sha_short && data.active_sha_short !== "unknown"
@@ -442,7 +453,6 @@ async function loadKeyboxes() {
             : (data.active_id === "custom" ? "自定义" : "当前生效"));
         UI.keyboxActiveTag.classList.toggle("tag-outline",
             !data.installed || data.active_id === "custom");
-        const available = items.filter((it) => it.available !== false);
         UI.keyboxSelect.disabled = !available.length;
         UI.keyboxApply.disabled = !available.length;
         clearFailure("keybox");
@@ -1601,4 +1611,12 @@ document.addEventListener("DOMContentLoaded", onReady);
     });
 
     refresh();
+})();
+
+/* KeyBox state is owned by the backend (webui.sh / native endpoint); poll it so a
+   keybox added or replaced outside the WebUI shows up without a manual refresh. */
+(function watchKeyboxState() {
+    if (document.visibilityState === "hidden") return;
+    loadKeyboxes().catch(() => {});
+    setTimeout(watchKeyboxState, 10000);
 })();
