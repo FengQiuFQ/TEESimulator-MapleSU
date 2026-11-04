@@ -569,6 +569,14 @@ void start() {
     LOGI("SOTER-SOCK lane enabled proto=%u pid=%d", kProtocolVersion, ::getpid());
 }
 
+/* Verbose logging is opt-in through the WebUI toggle (a file the daemon can create
+ * without a reboot). Stat is cheap and the transaction rate is low, so read it each
+ * time instead of caching a stale value. */
+static bool verboseLogging() {
+    struct stat info {};
+    return ::stat("/data/adb/tricky_store/debug-on", &info) == 0;
+}
+
 bool shouldIntercept(uint32_t code) {
     if (!g_lane_enabled.load(std::memory_order_relaxed)) return false;
     if (code < kMinCode || code > kMaxCode) return false;
@@ -623,6 +631,10 @@ bool handleTransaction(uint64_t tx_id, uint32_t code, const android::Parcel &req
     put32(body, static_cast<uint32_t>(size));
     if (size > 0) body.insert(body.end(), data, data + size);
 
+    if (verboseLogging()) {
+        LOGI("SOTER-SOCK TX code=%u uid=%d pid=%d tx=%llu bytes=%zu flags=%u", code, caller_uid,
+             caller_pid, static_cast<unsigned long long>(tx_id), size, flags);
+    }
     g_tx_total.fetch_add(1);
     if (!sendFrame(fd, kTypeTx, req_id, body)) {
         removePending(req_id);
