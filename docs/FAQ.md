@@ -62,3 +62,36 @@ arm64-v8a、Android 10+、KernelSU / Magisk / APatch。
 - Soter：ASK/AuthKey 可生成、会话可用、签名可验。
 
 这些都是**公开检测器的公开项**，不代表任何商业风控的结论，也不承诺持续通过。
+
+## How do I capture logs for an issue report?
+
+There is no separate "debug build": the release module already logs the events that
+matter (transaction IDs, Soter routing, injection results) at info level. What differs
+is **who can read the log**, because Android does not let ordinary apps read `logcat`.
+
+Three ways, in order of convenience:
+
+1. **From a PC (recommended)** — no root needed on the phone, just USB debugging:
+
+   ```bash
+   adb logcat -s TEESimulator:V MPL-SOTER:V > teesim.log
+   ```
+
+2. **On the device as root** — collect a trimmed bundle:
+
+   ```bash
+   su -c 'sh /data/local/tmp/collect_logs.sh'
+   # -> /sdcard/Download/teesim-diag-<timestamp>.txt
+   ```
+
+   The script ships in `tools/collect_logs.sh`; it gathers the module version,
+   `ksu_status`, the Soter route, injection counts, the last log lines and AVC denials,
+   and redacts serial-like values.
+
+3. **Without root or a PC** — the WebUI and `/data/adb/tricky_store/ksu_status` still
+   show whether the daemon started, whether injection succeeded and which Soter channel
+   is in use. A screenshot of those panels is often enough.
+
+Before posting: remove the keybox path/contents if you edited it, device serials, account
+IDs and anything else personal. `collect_logs.sh` already redacts the common cases, but
+review the file yourself.
