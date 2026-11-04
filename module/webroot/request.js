@@ -153,7 +153,7 @@ const ModuleRoot = (() => {
     /* 6.0.18: flat layout first (classes.dex at the module root), then the old
        core/ layout, then the Ultra layout. The hint list covers both ids we
        have shipped (tricky_store now, teesimulator-rs before). */
-    const MODULE_ROOT_HINTS = ["/data/adb/modules/tricky_store", "/data/adb/modules/teesimulator-rs"];
+    const MODULE_ROOT_HINTS = ["/data/adb/modules/trick_store", "/data/adb/modules/tricky_store", "/data/adb/modules/teesimulator-rs"];
     const DEX_RELS = ["classes.dex", "core/classes.dex", "TEESimulatorRS_Core/classes.dex"];
     const WEBUI_REL = "core/webui.sh";
     /* dex 字符串表里是类型描述符 Lmpl/ScopeCli;，grep dex 必须用斜杠形式；

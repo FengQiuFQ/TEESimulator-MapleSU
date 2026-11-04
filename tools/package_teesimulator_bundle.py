@@ -140,13 +140,13 @@ PRO_RELEASE_ZIP = os.path.join(ROOT, "deliverables", "teesim-6.0.9",
 PRO_RELEASE_KEYBOX = "TEESimulatorRS_Core/keybox.xml"
 PRO_KEYBOX_SHA256 = "b7629b3d348c7386b397966111c0ef3b3d9fa9eef4e2d715a64fef6740b6de49"
 
-MODULE_PROP = """id=tricky_store
+MODULE_PROP = """id=trick_store
 name=TEESimulator-RS_MapleSU
-version=6.0.30_MapleSU
-versionCode=63000
+version=6.0.29_MapleSU
+versionCode=62900
 author=TEESimulator-RS / MapleSU
+description=频道：@MapleAutumn MapleSU_Normal定制版.Hardware-backed key attestation simulator, bundled and default-installed by MapleSU. By.MapleAutumn Customized Fixed Soter. 解决TEESimulator-RS目前已知所有检测点与Soter.
 updateJson=https://raw.githubusercontent.com/FengQiuFQ/TEESimulator-MapleSU/main/update.json
-description=Hardware-backed key attestation simulator, bundled and default-installed by MapleSU. By.MapleAutumn, customized, Soter lane fixed. Upstream flat layout: the daemon starts once, at the service stage, with no gating preflight. The module dex reads its configuration from /data/adb/tricky_store; boot outcomes are recorded in /data/adb/tricky_store/ksu_status. 6.0.11 appends two diagnostic snapshots (20s/60s) to /sdcard/Download/tee_diag.txt.
 """
 
 CUSTOMIZE = r"""#!/system/bin/sh
@@ -253,13 +253,18 @@ fi
 # 6.0.13: certificate chain defaults to OFF; nothing is seeded here.
 
 # Two TEESimulator modules would both start a daemon and both inject into
-# keystore2; the kernel-side module uses the upstream id.
-if [ -d /data/adb/modules/tricky_store ]; then
-  ui_print "! upstream module 'tricky_store' is also installed"
-  ui_print "! disable/remove one of them, otherwise two daemons inject keystore2"
-fi
+# keystore2. The previous ids (teesimulator-rs, tricky_store) are migrated by
+# service.sh on the next boot: their directories are disabled and their daemons
+# stopped. User data lives in /data/adb/tricky_store and is kept.
+for _old in teesimulator-rs tricky_store; do
+  if [ -d "/data/adb/modules/$_old" ]; then
+    ui_print "- 检测到旧模块目录 $_old，开机时将自动迁移（配置保留）"
+  fi
+done
 
-ui_print "- Done"
+ui_print "『时光流转，愿你能与珍爱之人再度重逢』"
+ui_print "Channel：@MapleAutumn"
+ui_print "By.MapleAutumn"
 """
 
 SERVICE = r"""#!/system/bin/sh
@@ -891,17 +896,20 @@ done
 # Upgrading from our previous module id (teesimulator-rs -> tricky_store) would
 # otherwise leave two copies: the old dir keeps its own daemon alive. Neutralise
 # the legacy copy and stop its daemon before the conflict check.
-case " $_CONFLICTS " in
-    *" teesimulator-rs "*)
-        _legacy=/data/adb/modules/teesimulator-rs
-        if [ -f "$_legacy/module.prop" ] && grep -q '^name=TEESimulator-RS' "$_legacy/module.prop" 2>/dev/null; then
-            : > "$_legacy/disable" 2>/dev/null
-            for _p in $(pidof TEESimulator 2>/dev/null); do kill "$_p" 2>/dev/null; done
-            log_msg "migrated legacy module id: disabled /data/adb/modules/teesimulator-rs"
-            _CONFLICTS=$(printf ' %s ' "$_CONFLICTS" | sed 's/ teesimulator-rs / /')
-        fi
-        ;;
-esac
+for _legacy_id in teesimulator-rs tricky_store; do
+    case " $_CONFLICTS " in
+        *" $_legacy_id "*)
+            _legacy=/data/adb/modules/$_legacy_id
+            if [ -f "$_legacy/module.prop" ] \
+                && grep -q '^name=TEESimulator-RS' "$_legacy/module.prop" 2>/dev/null; then
+                : > "$_legacy/disable" 2>/dev/null
+                for _p in $(pidof TEESimulator 2>/dev/null); do kill "$_p" 2>/dev/null; done
+                log_msg "migrated legacy module id: disabled /data/adb/modules/$_legacy_id"
+                _CONFLICTS=$(printf ' %s ' "$_CONFLICTS" | sed "s/ $_legacy_id / /")
+            fi
+            ;;
+    esac
+done
 
 if [ -n "$_CONFLICTS" ]; then
     set_status conflict "${_CONFLICTS# }"
