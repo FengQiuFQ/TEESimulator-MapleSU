@@ -142,9 +142,10 @@ PRO_KEYBOX_SHA256 = "b7629b3d348c7386b397966111c0ef3b3d9fa9eef4e2d715a64fef6740b
 
 MODULE_PROP = """id=tricky_store
 name=TEESimulator-RS_MapleSU
-version=6.0.29_MapleSU
-versionCode=62900
-author=SKRoot / TEESimulator-RS / MapleSU
+version=6.0.30_MapleSU
+versionCode=63000
+author=TEESimulator-RS / MapleSU
+updateJson=https://raw.githubusercontent.com/FengQiuFQ/TEESimulator-MapleSU/main/update.json
 description=Hardware-backed key attestation simulator, bundled and default-installed by MapleSU. By.MapleAutumn, customized, Soter lane fixed. Upstream flat layout: the daemon starts once, at the service stage, with no gating preflight. The module dex reads its configuration from /data/adb/tricky_store; boot outcomes are recorded in /data/adb/tricky_store/ksu_status. 6.0.11 appends two diagnostic snapshots (20s/60s) to /sdcard/Download/tee_diag.txt.
 """
 

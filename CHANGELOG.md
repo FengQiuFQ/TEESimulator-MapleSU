@@ -2,6 +2,17 @@
 
 所有显著变更都会记录在这里。版本号与 Release tag 对应（`vX.Y.Z`）。
 
+## v6.0.30 — 2026-11-04
+
+### 新增
+- **`module.prop` 增加 `updateJson`**，指向仓库根目录的 `update.json`；
+  KernelSU / Magisk 可直接在模块列表里检查更新。
+- 仓库根发布 `update.json`（version / versionCode / zipUrl / changelog）。
+
+### 其它
+- `module.prop` 的 `author` 去掉私有构建名称，改为 `TEESimulator-RS / MapleSU`。
+- Soter 注入轮询 1000ms → 400ms，并增加一次 300ms 重试（进程刚起、linker 未就绪时）。
+
 ## v6.0.29 — 2026-11-04
 
 ### 新增
@@ -11,7 +22,8 @@
 - **缺失 KeyBox 显著提示**：WebUI 顶部横幅“内置 Keybox 密钥未配置 / TEE 模块不生效”。
 
 ### 修复
-- target 刷新健壮性：``/前导空格解析、保留注释行、内容未变不重写（避免反复热加载）。
+- target 刷新健壮性：`
+`/前导空格解析、保留注释行、内容未变不重写（避免反复热加载）。
 - 刷新临时文件移出配置目录，解决日志被 `.diag.*`/`ksu_boot.log` 刷屏。
 - `ksu_status` 新增 `target_refresh=ok:N` / `fail:原因`。
 - 诊断导出补全 target_refresh、auto_third_app、现场 `pm` 计数、`target.txt` 前 20 行、`soter_scope` 行数。
