@@ -87,8 +87,8 @@ KBU_TMP=$CONFIG_DIR/keybox.xml.download.tmp
 KSU_STATUS=$CONFIG_DIR/ksu_status
 
 KEYBOX_XML_SRC=$CORE/keybox.xml
-KEYBOX_ID=yurikey66
-KEYBOX_NAME=Yurikey66
+KEYBOX_ID=yurikey67
+KEYBOX_NAME=Yurikey67
 
 # get_version_info_json() constants (MOD_VER / MOD_AUTHOR_STR in build_info.h).
 MOD_VERSION_FALLBACK=6.0.7_MapleSU
@@ -517,7 +517,7 @@ cmd_targets() {
 }
 
 # =============================================================================
-# keybox (single built-in candidate: yurikey66)
+# keybox (single built-in candidate: yurikey67)
 # =============================================================================
 
 keybox_installed() {
@@ -525,7 +525,7 @@ keybox_installed() {
 }
 
 # No keybox installed must read as "none", never as the built-in name: the public
-# build ships no key material, and claiming Yurikey66 made the WebUI offer a switch
+# build ships no key material, and claiming a built-in name made the WebUI offer a switch
 # that could only fail with keybox_source_missing.
 keybox_current() {
     if ! keybox_installed; then printf 'none'; return 0; fi
@@ -1477,6 +1477,10 @@ cmd_logs() {
         printf '\n[pm third-party count]\n'
         (timeout 10 pm list packages -3 2>/dev/null || pm list packages -3 2>/dev/null) | wc -l
         printf '\n[target.txt head]\n'; head -n 20 "$CONFIG_DIR/target.txt" 2>/dev/null
+        printf '\n[soter package]\n'
+        pm path com.tencent.soter.soterserver 2>&1 | sed -n '1,3p'
+        printf '\n[soter process]\n'
+        pidof com.tencent.soter.soterserver 2>/dev/null || echo not-running
         printf '\n[soter_scope]\n'
         wc -l < "/data/user/0/com.tencent.soter.soterserver/files/soter_scope" 2>/dev/null
         printf '\n[injection]\n'
@@ -1557,6 +1561,40 @@ kbu_tick() {
     kbu_perform_update
 }
 
+
+# Start saterserver ahead of any client. The service is normally created by
+# bindService; root may or may not be allowed to start it, so the outcome is
+# reported instead of assumed.
+soter_warm() {
+    _pkg=com.tencent.soter.soterserver
+    if [ -n "$(pidof "$_pkg" 2>/dev/null)" ]; then
+        printf '{"ok":true,"running":true,"pid":"%s"}\n' "$(pidof "$_pkg" 2>/dev/null | cut -d' ' -f1)"
+        return 0
+    fi
+    if ! pm path "$_pkg" >/dev/null 2>&1; then
+        err_json 'soter_package_missing'
+        return
+    fi
+    _svcs=$(dumpsys package "$_pkg" 2>/dev/null | grep -o "$_pkg/[A-Za-z0-9._$]*" | sort -u)
+    if [ -z "$_svcs" ]; then
+        err_json 'soter_service_unknown'
+        return
+    fi
+    _started=0
+    _tried=
+    for _s in $_svcs; do
+        _tried="$_tried $_s"
+        if am start-service -n "$_s" --user 0 >/dev/null 2>&1; then
+            _started=1
+        elif cmd activity start-service -n "$_s" --user 0 >/dev/null 2>&1; then
+            _started=1
+        fi
+    done
+    log_line "soter_warm tried:$_tried started=$_started"
+    printf '{"ok":true,"running":false,"started":%s,"tried":"%s"}\n' \
+        "$([ "$_started" = 1 ] && echo true || echo false)" "$(json_escape "${_tried# }")"
+}
+
 cmd_info() {
     _ver=$(module_version)
     _vcode=$(module_version_code)
@@ -1571,7 +1609,7 @@ cmd_info() {
         _kb_short=unknown
     fi
     _soter=$(get_soter)
-    printf '{"module":"TEESimulator-RS","version":"%s","author":"%s","dex_sha256":"%s","dex_short":"%s","keybox_short":"%s","keybox_current":"%s","keybox_active":"%s","soter_forge":%s,"build":"%s","mode":"ksu","backend":"ksu","features":["info","get soter","set soter","get soter_certs","set soter_certs","get hide_bootloader","set hide_bootloader","get auto_third_app","set auto_third_app","get patch","set patch","keyboxes","keybox_set","keybox_reload","kbu_status","kbu_config","kbu_now","scope list","scope set","scope setall","targets","get debug","set debug","logs","target-watch","kbu-tick"],"unsupported":["get fix_tee","set fix_tee"],"features_note":"target.txt accepts both prefix (!pkg/?pkg, dex) and suffix (pkg!/pkg?, upstream) markers"}\n' \
+    printf '{"module":"TEESimulator-RS","version":"%s","author":"%s","dex_sha256":"%s","dex_short":"%s","keybox_short":"%s","keybox_current":"%s","keybox_active":"%s","soter_forge":%s,"build":"%s","mode":"ksu","backend":"ksu","features":["info","get soter","set soter","get soter_certs","set soter_certs","get hide_bootloader","set hide_bootloader","get auto_third_app","set auto_third_app","get patch","set patch","keyboxes","keybox_set","keybox_reload","kbu_status","kbu_config","kbu_now","scope list","scope set","scope setall","targets","get debug","set debug","logs","target-watch","kbu-tick","soter-warm"],"unsupported":["get fix_tee","set fix_tee"],"features_note":"target.txt accepts both prefix (!pkg/?pkg, dex) and suffix (pkg!/pkg?, upstream) markers"}\n' \
         "$(json_escape "$_ver")" "$(json_escape "$MOD_AUTHOR")" \
         "$_dex_sha" "$_dex_short" "$_kb_short" \
         "$(json_escape "$_cur")" "$(json_escape "$_act")" \
@@ -1646,6 +1684,9 @@ case $CMD in
         ;;
     kbu-tick)
         kbu_tick && printf 'OK\n' || err_json 'kbu_tick_failed'
+        ;;
+    soter-warm)
+        soter_warm
         ;;
     logs)
         cmd_logs

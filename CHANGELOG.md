@@ -2,6 +2,20 @@
 
 所有显著变更都会记录在这里。版本号与 Release tag 对应（`vX.Y.Z`）。
 
+## v6.0.31 — 2026-11-04
+
+### 修复
+- **G02（标签 g）**：`USAGE_COUNT_LIMIT` 用尽后写入持久墓碑，`getKeyEntry` 判定改为非消费式 `contains`，仅在同名重新生成时清除；`containsAlias=false`、下一次操作稳定返回 `KEY_NOT_FOUND`。
+- **H03（标签 c）**：`doSoftwareKeyGen` 执行期间把 alias 标记为不存在，关闭“生成中被转发到真实 keystore2”的窗口；成功路径在缓存写入后立即清除标记。
+
+### Soter
+- injector 自身每分钟尝试拉起 `com.tencent.soter.soterserver`（不再只等客户端绑定）；`webui.sh soter-warm` 保留。
+- 诊断导出新增 `[soter package]`、`[soter process]`。
+
+### 可观测
+- 新增 `MPL-KEY serve … leaf=<sha8>` 与 `MPL-USAGE adjust … limit/remaining`。
+- `ksu_status` 的 `keybox=` 行改为实时刷新；导出新增 `[keybox live]`。
+
 ## v6.0.30 — 2026-11-04
 
 ### 修订（6.0.30 最终构建）

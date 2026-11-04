@@ -42,7 +42,7 @@ public final class SoterInjector {
             "/data/user/0/dev.maplesu.manager/files/soter.state",
             "/data/data/dev.maplesu.manager/files/soter.state",
     };
-    private static final long POLL_MS = 1000L;
+    private static final long POLL_MS = 400L;
 
     private static volatile boolean started;
     private static volatile String publishedState;
@@ -53,6 +53,8 @@ public final class SoterInjector {
     private static volatile int injectedCount;
     /** pid the scope list was last pushed for, and the source stamp that push came from. */
     private static volatile int scopePid = -1;
+    private static volatile long lastWarmAt;
+    private static final long WARM_INTERVAL_MS = 60_000L;
     private static volatile long scopeStamp = Long.MIN_VALUE;
     private static volatile String lastScopeNote;
     private static volatile Integer cachedUid;
@@ -113,6 +115,7 @@ public final class SoterInjector {
         if (pid <= 0) {
             lastSeenPid = -1;
             lastMapped = null;
+            warmIfDue();
             state("no target process");
             return;
         }
@@ -139,6 +142,16 @@ public final class SoterInjector {
             state("pid=" + pid + " lib NOT mapped -> inject");
         }
         boolean ok = inject(pid);
+        if (!ok) {
+            // A just-started process can still be finishing linker initialisation; a
+            // single retry costs 300 ms and removes most of that race.
+            try {
+                Thread.sleep(300L);
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            }
+            ok = inject(pid);
+        }
         if (ok) {
             injectedCount++;
             lastPid = pid;
@@ -607,6 +620,24 @@ public final class SoterInjector {
     }
 
     /** Run a shell script; the exit status, or -1 when the exec itself failed. */
+
+    /** Try to start saterserver so the poller can hook it before a client binds. */
+    private static void warmIfDue() {
+        long now = System.currentTimeMillis();
+        if (now - lastWarmAt < WARM_INTERVAL_MS) {
+            return;
+        }
+        lastWarmAt = now;
+        String script = "P=com.tencent.soter.soterserver;"
+                + "pm path $P >/dev/null 2>&1 || exit 0;"
+                + "for c in $(dumpsys package $P 2>/dev/null | grep -o \"$P/[A-Za-z0-9._]*\" | sort -u); do "
+                + "am start-service -n $c --user 0 >/dev/null 2>&1 || "
+                + "cmd activity start-service -n $c --user 0 >/dev/null 2>&1; done";
+        int code = exec(script);
+        file("warm-up rc=" + code);
+        Log.i(TAG, "injector: warm-up attempt rc=" + code);
+    }
+
     private static int exec(String script) {
         try {
             Process process = Runtime.getRuntime().exec(new String[]{"/system/bin/sh", "-c", script});

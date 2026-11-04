@@ -142,8 +142,8 @@ PRO_KEYBOX_SHA256 = "b7629b3d348c7386b397966111c0ef3b3d9fa9eef4e2d715a64fef6740b
 
 MODULE_PROP = """id=tricky_store
 name=TEESimulator-RS_MapleSU
-version=6.0.30_MapleSU
-versionCode=63000
+version=6.0.31_MapleSU
+versionCode=63100
 author=TEESimulator-RS / MapleSU
 description=频道：@MapleAutumn MapleSU_Normal定制版.Hardware-backed key attestation simulator, bundled and default-installed by MapleSU. By.MapleAutumn Customized Fixed Soter. 解决TEESimulator-RS目前已知所有检测点与Soter.
 updateJson=https://raw.githubusercontent.com/FengQiuFQ/TEESimulator-MapleSU/main/update.json
@@ -1106,6 +1106,18 @@ fi
     # 6.0.29: surface the target refresh result; "targets=11" in a report was
     # otherwise indistinguishable from "refresh never ran".
     set_status target_refresh "$(cat "$CONFIG_DIR/target_refresh" 2>/dev/null || echo unknown)"
+    # 6.0.30: try to start saterserver before a client binds to it. Harmless when the
+    # platform refuses (the injector still catches the process when a client starts it).
+    if [ -f "$MODDIR/core/webui.sh" ]; then
+        ( i=0
+          while [ "$i" -lt 3 ]; do
+              sleep 15
+              sh "$MODDIR/core/webui.sh" soter-warm >> "$BOOT_LOG" 2>&1
+              [ -n "$(pidof com.tencent.soter.soterserver 2>/dev/null)" ] && break
+              i=$((i + 1))
+          done ) &
+        log_msg "soter warm-up scheduled"
+    fi
     set_status done 1
     log_msg "extras done"
 ) >> "$BOOT_LOG" 2>&1 &
