@@ -140,7 +140,7 @@ PRO_RELEASE_ZIP = os.path.join(ROOT, "deliverables", "teesim-6.0.9",
 PRO_RELEASE_KEYBOX = "TEESimulatorRS_Core/keybox.xml"
 PRO_KEYBOX_SHA256 = "b7629b3d348c7386b397966111c0ef3b3d9fa9eef4e2d715a64fef6740b6de49"
 
-MODULE_PROP = """id=trick_store
+MODULE_PROP = """id=tricky_store
 name=TEESimulator-RS_MapleSU
 version=6.0.29_MapleSU
 versionCode=62900
@@ -256,7 +256,7 @@ fi
 # keystore2. The previous ids (teesimulator-rs, tricky_store) are migrated by
 # service.sh on the next boot: their directories are disabled and their daemons
 # stopped. User data lives in /data/adb/tricky_store and is kept.
-for _old in teesimulator-rs tricky_store; do
+for _old in teesimulator-rs trick_store; do
   if [ -d "/data/adb/modules/$_old" ]; then
     ui_print "- 检测到旧模块目录 $_old，开机时将自动迁移（配置保留）"
   fi
@@ -896,7 +896,7 @@ done
 # Upgrading from our previous module id (teesimulator-rs -> tricky_store) would
 # otherwise leave two copies: the old dir keeps its own daemon alive. Neutralise
 # the legacy copy and stop its daemon before the conflict check.
-for _legacy_id in teesimulator-rs tricky_store; do
+for _legacy_id in teesimulator-rs trick_store; do
     case " $_CONFLICTS " in
         *" $_legacy_id "*)
             _legacy=/data/adb/modules/$_legacy_id

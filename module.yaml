@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/KernelSU-Modules/tools/main/schemas/module.schema.json
 schemaVersion: 1
-id: trick_store
+id: tricky_store
 name: TEESimulator-MapleSU
 summary: Standalone Key Attestation and Soter compatibility layer for rooted Android
 description: README.md
