@@ -449,8 +449,14 @@ async function loadKeyboxes() {
         PanelStatus.clear(card);
         setKeyboxWarning(!data.installed);
         if (!data.installed) {
-            PanelStatus.show(card, "未安装 KeyBox：请把 keybox.xml 放到 /data/adb/tricky_store/keybox.xml",
-                { readonly: true });
+            const probe = data.probe || {};
+            let reason = "未安装 KeyBox：请把 keybox.xml 放到 /data/adb/tricky_store/keybox.xml";
+            if (probe.exists && !probe.size) {
+                reason = "KeyBox 文件存在但为空（0 字节）";
+            } else if (probe.exists) {
+                reason = "KeyBox 文件存在但无法读取，请检查权限与 SELinux 上下文";
+            }
+            PanelStatus.show(card, reason, { readonly: true });
         } else if (!available.length) {
             PanelStatus.show(card, "没有可用的内置 KeyBox", { readonly: true });
         }

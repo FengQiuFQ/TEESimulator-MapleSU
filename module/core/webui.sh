@@ -558,6 +558,15 @@ keyboxes_json() {
     if [ -n "$_src_sha" ]; then _item_short=$(short_sha "$_src_sha"); else _item_short='unknown'; fi
     _installed=false
     keybox_installed && _installed=true
+    # Probe details: "absent" and "present but empty/unreadable" must not look the
+    # same in a report.
+    _exists=false
+    [ -e "$KEYBOX_XML_DST" ] && _exists=true
+    _size=0
+    if [ -f "$KEYBOX_XML_DST" ]; then
+        _size=$(wc -c < "$KEYBOX_XML_DST" 2>/dev/null | tr -d ' ')
+    fi
+    case $_size in ''|*[!0-9]*) _size=0 ;; esac
     _available=false
     [ -f "$KEYBOX_XML_SRC" ] && _available=true
     if [ "$_installed" = false ]; then
@@ -575,8 +584,9 @@ keyboxes_json() {
         _item_active=false
     fi
     [ -n "${_cur_name:-}" ] || _cur_name=$KEYBOX_NAME
-    printf '{"current":"%s","current_name":"%s","installed":%s,"active_id":"%s","active_name":"%s","active_sha_short":"%s","items":[{"id":"%s","name":"%s","sha_short":"%s","active":%s,"available":%s}]}\n' \
+    printf '{"current":"%s","current_name":"%s","installed":%s,"probe":{"path":"%s","exists":%s,"size":%s,"uid":%s},"active_id":"%s","active_name":"%s","active_sha_short":"%s","items":[{"id":"%s","name":"%s","sha_short":"%s","active":%s,"available":%s}]}\n' \
         "$(json_escape "$_cur")" "$(json_escape "$_cur_name")" "$_installed" \
+        "$(json_escape "$KEYBOX_XML_DST")" "$_exists" "$_size" "$(id -u 2>/dev/null || echo 0)" \
         "$(json_escape "$_act")" "$(json_escape "$_act_name")" "$_act_short" \
         "$KEYBOX_ID" "$KEYBOX_NAME" "$_item_short" "$_item_active" "$_available"
 }

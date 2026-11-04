@@ -755,8 +755,15 @@ function normalizeKeyboxes(raw) {
        this field the banner logic saw undefined and warned even with a keybox in
        place. */
     const installed = asBool(pickField(data, ["installed", "has_keybox"], false), false);
+    const probe = (data.probe && typeof data.probe === "object") ? data.probe : {};
     return {
         installed: installed,
+        probe: {
+            path: String(probe.path || ""),
+            exists: asBool(probe.exists, false),
+            size: Number(probe.size || 0),
+            uid: String(probe.uid === undefined ? "" : probe.uid),
+        },
         current: current,
         current_name: String(pickField(data, ["current_name", "current_label"], current)),
         active_id: activeId,
