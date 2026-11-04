@@ -1386,7 +1386,7 @@ cmd_logs() {
     sed -i -E 's/(android_id[=: ]+)[0-9a-fA-F]+/\1<redacted>/g' "$_out" 2>/dev/null
 
     _bytes=$(wc -c < "$_out" 2>/dev/null | tr -d ' ')
-    _prev=$(head -c 400 "$_out" 2>/dev/null)
+    _prev=$(head -c 400 "$_out" 2>/dev/null | LC_ALL=C tr -cd " -~")
     printf '{"ok":true,"path":"%s","bytes":%s,"preview":"%s"}\n' \
         "$(json_escape "$_out")" "${_bytes:-0}" "$(json_escape "$_prev")"
 }
