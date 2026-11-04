@@ -746,9 +746,17 @@ function normalizeKeyboxes(raw) {
         name: String(pickField(item, ["name", "label", "title"], "")),
         sha_short: String(pickField(item, ["sha_short", "sha", "sha256_short", "sha256"], "unknown")),
         active: asBool(item && item.active, false),
+        /* Whether the built-in source file exists; absent means "assume yes" so an
+           older backend does not disable the selector. */
+        available: !(item && item.available === false),
     })).filter((item) => item.id.length > 0);
     const activeItem = normalizedItems.filter((item) => item.active)[0] || null;
+    /* A keybox is "configured" only when the backend says the file exists. Without
+       this field the banner logic saw undefined and warned even with a keybox in
+       place. */
+    const installed = asBool(pickField(data, ["installed", "has_keybox"], false), false);
     return {
+        installed: installed,
         current: current,
         current_name: String(pickField(data, ["current_name", "current_label"], current)),
         active_id: activeId,
