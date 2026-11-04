@@ -156,3 +156,20 @@ dialog > .btn { width: 100%; margin-top: 20px; }
 @media (max-width: 360px) { .shell { padding-left: 12px; padding-right: 12px; } .card { padding: 16px; } .brand-mark { display: none; } .brand-text h1 { font-size: 24px; } .tag { font-size: 10px; } .field-row { flex-wrap: wrap; } .field-row .select-wrap { flex-basis: 100%; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } #snow { display: none; } }
 @media (prefers-reduced-transparency: reduce) { dialog { backdrop-filter: none !important; background: var(--card) !important; } }
+
+/* Missing keybox: the module is inert, so say it loudly instead of burying it. */
+.alert-warn {
+    margin: 12px 0 4px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 149, 0, 0.55);
+    background: rgba(255, 149, 0, 0.12);
+    color: inherit;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    line-height: 1.45;
+}
+.alert-warn b { font-size: 0.98em; }
+.alert-warn span { font-size: 0.86em; opacity: 0.85; }
+.alert-warn[hidden] { display: none; }

@@ -395,11 +395,19 @@ get_auto_third_app() {
 # package is still installed and only appends plain names for the rest.
 refresh_target_txt() {
     ensure_config_dir || return 1
-    _tmp="$TARGET_TXT.tmp.$$"
-    _raw="$TARGET_TXT.raw.$$"
-    _inst="$TARGET_TXT.inst.$$"
-    _kept="$TARGET_TXT.kept.$$"
-    _names="$TARGET_TXT.names.$$"
+    # Work outside the watched config directory so a refresh does not look like a
+    # configuration change to the daemon's file watcher.
+    _base="${TMPDIR:-/data/local/tmp}/tee-target.$$"
+    if ! : > "$_base.probe" 2>/dev/null; then
+        _base="$TARGET_TXT.$$"
+    else
+        rm -f "$_base.probe" 2>/dev/null
+    fi
+    _tmp="$_base.tmp"
+    _raw="$_base.raw"
+    _inst="$_base.inst"
+    _kept="$_base.kept"
+    _names="$_base.names"
     : > "$_inst" 2>/dev/null
     if command -v pm >/dev/null 2>&1; then
         # `pm` talks to system_server; never let a slow boot block service.sh.
@@ -410,11 +418,13 @@ refresh_target_txt() {
         fi
         _rc=$?
         if [ "$_rc" -eq 0 ] && [ -s "$_raw" ]; then
-            sed -n 's/^package://p' "$_raw" | sort -u > "$_inst" 2>/dev/null
+            tr -d "\r" < "$_raw" | sed -n "s/^[[:space:]]*package://p" \
+                | tr -d " " | sort -u > "$_inst" 2>/dev/null
         fi
     fi
     rm -f "$_raw" 2>/dev/null
     if [ ! -s "$_inst" ]; then
+        printf 'fail:pm_empty\n' > "$CONFIG_DIR/target_refresh" 2>/dev/null
         rm -f "$_inst" "$_kept" "$_names" "$_tmp" 2>/dev/null
         return 1
     fi
@@ -425,7 +435,12 @@ refresh_target_txt() {
         while IFS= read -r _line || [ -n "$_line" ]; do
             _line=$(trim "$_line")
             [ -n "$_line" ] || continue
-            case $_line in \#*) continue ;; esac
+            case $_line in
+                \#*)
+                    printf '%s\n' "$_line" >> "$_kept" 2>/dev/null
+                    continue
+                    ;;
+            esac
             _pkg=$_line
             case $_line in
                 '!'*|'?'*) _pkg=${_line#?} ;;
@@ -445,12 +460,23 @@ refresh_target_txt() {
         if grep -q -x -F -e "$_pkg" "$_names" 2>/dev/null; then continue; fi
         printf '%s\n' "$_pkg" >> "$_tmp" 2>/dev/null
     done < "$_inst"
-    _out="$TARGET_TXT.merge.$$"
+    _out="$_base.merge"
     cat "$_kept" "$_tmp" > "$_out" 2>/dev/null
     rm -f "$_inst" "$_kept" "$_names" "$_tmp" 2>/dev/null
     if [ -s "$_out" ]; then
+        # Only replace the file when the content actually changed: an unconditional
+        # rewrite wakes the daemon's watcher every cycle.
+        _lines=$(wc -l < "$_out" 2>/dev/null | tr -d ' ')
+        if [ -f "$TARGET_TXT" ] && cmp -s "$_out" "$TARGET_TXT"; then
+            printf 'ok:%s unchanged\n' "${_lines:-0}" > "$CONFIG_DIR/target_refresh" 2>/dev/null
+            rm -f "$_out" 2>/dev/null
+            return 0
+        fi
         chmod 0644 "$_out" 2>/dev/null
-        mv -f "$_out" "$TARGET_TXT" 2>/dev/null && return 0
+        if mv -f "$_out" "$TARGET_TXT" 2>/dev/null; then
+            printf 'ok:%s\n' "${_lines:-0}" > "$CONFIG_DIR/target_refresh" 2>/dev/null
+            return 0
+        fi
     fi
     rm -f "$_out" 2>/dev/null
     return 1
@@ -1389,6 +1415,13 @@ cmd_logs() {
         printf '\n[ksu_status]\n'; cat "$CONFIG_DIR/ksu_status" 2>/dev/null
         printf '\n[soter_route]\n'; cat "$CONFIG_DIR/soter_route" 2>/dev/null
         printf '\n[targets]\n'; grep -vc '^#' "$CONFIG_DIR/target.txt" 2>/dev/null
+        printf '\n[target_refresh]\n'; cat "$CONFIG_DIR/target_refresh" 2>/dev/null
+        printf '\n[auto_third_app]\n'; read_flag "$AUTO_THIRD_FLAG" 1
+        printf '\n[pm third-party count]\n'
+        (timeout 10 pm list packages -3 2>/dev/null || pm list packages -3 2>/dev/null) | wc -l
+        printf '\n[target.txt head]\n'; head -n 20 "$CONFIG_DIR/target.txt" 2>/dev/null
+        printf '\n[soter_scope]\n'
+        wc -l < "/data/user/0/com.tencent.soter.soterserver/files/soter_scope" 2>/dev/null
         printf '\n[injection]\n'
         _ks=$(pidof keystore2 2>/dev/null)
         printf 'keystore2=%s maps=%s\n' "$_ks" \
@@ -1413,6 +1446,60 @@ cmd_logs() {
         "$(json_escape "$_out")" "${_bytes:-0}" "$(json_escape "$_prev")"
 }
 
+
+# Continuous target refresh: every 30 seconds, from boot onwards, hot-reload safe.
+# Single instance guarded by a pid file (a second service.sh run must not double it).
+cmd_target_watch() {
+    _interval=${1:-30}
+    case $_interval in ''|*[!0-9]*) _interval=30 ;; esac
+    [ "$_interval" -ge 5 ] 2>/dev/null || _interval=5
+    _pidfile="$CONFIG_DIR/.target_watch.pid"
+    if [ -f "$_pidfile" ]; then
+        _old=$(cat "$_pidfile" 2>/dev/null | tr -dc '0-9')
+        if [ -n "$_old" ] && [ -d "/proc/$_old" ] \
+            && tr '\0' ' ' < "/proc/$_old/cmdline" 2>/dev/null | grep -q 'webui.sh'; then
+            printf '{"ok":true,"running":true,"pid":%s,"interval":%s}\n' "$_old" "$_interval"
+            return 0
+        fi
+        rm -f "$_pidfile" 2>/dev/null
+    fi
+    ensure_config_dir || { err_json 'config_dir_unavailable'; return; }
+    printf '%s\n' "$$" > "$_pidfile" 2>/dev/null
+    chmod 0644 "$_pidfile" 2>/dev/null
+    trap 'rm -f "$_pidfile" 2>/dev/null' EXIT INT TERM
+    printf '{"ok":true,"running":true,"pid":%s,"interval":%s}\n' "$$" "$_interval"
+    while :; do
+        if [ "$(read_flag "$AUTO_THIRD_FLAG" 1)" = 1 ]; then
+            refresh_target_txt >/dev/null 2>&1 \
+                || log_line 'target-watch: refresh skipped'
+        fi
+        # KeyBox: only talks to the network when an update is actually due.
+        kbu_tick >/dev/null 2>&1 || log_line 'target-watch: kbu tick failed'
+        sleep "$_interval"
+    done
+}
+
+
+# Cheap due check for the keybox auto-update; the heavy path only runs when due.
+kbu_tick() {
+    load_kbu_conf
+    [ "$KBU_ENABLED" = 1 ] || return 0
+    _now=$(date +%s 2>/dev/null) || return 0
+    case $_now in ''|*[!0-9]*) return 0 ;; esac
+    _due=0
+    if [ "$KBU_RETRY_AFTER" -gt 0 ] 2>/dev/null && [ "$_now" -ge "$KBU_RETRY_AFTER" ] 2>/dev/null; then
+        _due=1
+    elif [ "$KBU_INTERVAL" -le 0 ] 2>/dev/null || [ "$KBU_LAST_EPOCH" -le 0 ] 2>/dev/null; then
+        _due=1
+    elif [ "$_now" -lt "$KBU_LAST_EPOCH" ] 2>/dev/null; then
+        _due=1
+    elif [ $((_now - KBU_LAST_EPOCH)) -ge $((KBU_INTERVAL * 3600)) ] 2>/dev/null; then
+        _due=1
+    fi
+    [ "$_due" = 1 ] || return 0
+    kbu_perform_update
+}
+
 cmd_info() {
     _ver=$(module_version)
     _vcode=$(module_version_code)
@@ -1427,7 +1514,7 @@ cmd_info() {
         _kb_short=unknown
     fi
     _soter=$(get_soter)
-    printf '{"module":"TEESimulator-RS","version":"%s","author":"%s","dex_sha256":"%s","dex_short":"%s","keybox_short":"%s","keybox_current":"%s","keybox_active":"%s","soter_forge":%s,"build":"%s","mode":"ksu","backend":"ksu","features":["info","get soter","set soter","get soter_certs","set soter_certs","get hide_bootloader","set hide_bootloader","get auto_third_app","set auto_third_app","get patch","set patch","keyboxes","keybox_set","kbu_status","kbu_config","kbu_now","scope list","scope set","scope setall","targets","get debug","set debug","logs"],"unsupported":["get fix_tee","set fix_tee"],"features_note":"target.txt accepts both prefix (!pkg/?pkg, dex) and suffix (pkg!/pkg?, upstream) markers"}\n' \
+    printf '{"module":"TEESimulator-RS","version":"%s","author":"%s","dex_sha256":"%s","dex_short":"%s","keybox_short":"%s","keybox_current":"%s","keybox_active":"%s","soter_forge":%s,"build":"%s","mode":"ksu","backend":"ksu","features":["info","get soter","set soter","get soter_certs","set soter_certs","get hide_bootloader","set hide_bootloader","get auto_third_app","set auto_third_app","get patch","set patch","keyboxes","keybox_set","kbu_status","kbu_config","kbu_now","scope list","scope set","scope setall","targets","get debug","set debug","logs","target-watch","kbu-tick"],"unsupported":["get fix_tee","set fix_tee"],"features_note":"target.txt accepts both prefix (!pkg/?pkg, dex) and suffix (pkg!/pkg?, upstream) markers"}\n' \
         "$(json_escape "$_ver")" "$(json_escape "$MOD_AUTHOR")" \
         "$_dex_sha" "$_dex_short" "$_kb_short" \
         "$(json_escape "$_cur")" "$(json_escape "$_act")" \
@@ -1493,6 +1580,12 @@ case $CMD in
     kbu_status)
         load_kbu_conf
         kbu_status_json
+        ;;
+    target-watch)
+        cmd_target_watch "${2:-30}"
+        ;;
+    kbu-tick)
+        kbu_tick && printf 'OK\n' || err_json 'kbu_tick_failed'
         ;;
     logs)
         cmd_logs

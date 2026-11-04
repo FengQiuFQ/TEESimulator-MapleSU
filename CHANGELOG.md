@@ -2,6 +2,21 @@
 
 所有显著变更都会记录在这里。版本号与 Release tag 对应（`vX.Y.Z`）。
 
+## v6.0.29 — 2026-11-04
+
+### 新增
+- **默认接管名单加入 3 个检测器**：`com.basicas.u52`（Demo 1.7）、`com.chunqiunativecheck`（春秋）、`com.maple.detect`；默认项 11 → 14。
+- **target.txt 常驻刷新**：`service.sh` 以 `setsid` 启动 `webui.sh target-watch 30`，每 30 秒合并三方应用；开机早期 `pm` 未就绪自动重试。
+- **KeyBox 到期检查同节拍**：`kbu_tick` 每 30 秒轻量检查，只有到期才联网。
+- **缺失 KeyBox 显著提示**：WebUI 顶部横幅“内置 Keybox 密钥未配置 / TEE 模块不生效”。
+
+### 修复
+- target 刷新健壮性：``/前导空格解析、保留注释行、内容未变不重写（避免反复热加载）。
+- 刷新临时文件移出配置目录，解决日志被 `.diag.*`/`ksu_boot.log` 刷屏。
+- `ksu_status` 新增 `target_refresh=ok:N` / `fail:原因`。
+- 诊断导出补全 target_refresh、auto_third_app、现场 `pm` 计数、`target.txt` 前 20 行、`soter_scope` 行数。
+- 空 KeyBox 显示“未安装”并禁用切换，不再误显示 Yurikey66 后报 `keybox_source_missing`。
+
 ## v6.0.24 — 2026-11-03
 
 ### 新增

@@ -46,6 +46,11 @@
             <span class="tag tag-outline" id="backend-mode">检测中</span>
             <button id="btn-reload" type="button" class="text-btn">刷新</button></div>
         <p class="load-detail" id="page-detail" hidden></p>
+
+        <div class="alert-warn" id="keybox-warning" role="alert" hidden>
+            <b>内置 Keybox 密钥未配置</b>
+            <span>TEE 模块不生效。请把 keybox.xml 放到 /data/adb/tricky_store/keybox.xml</span>
+        </div>
         <!-- SOTER 伪造 -->
         <section class="card">
             <div class="card-head">

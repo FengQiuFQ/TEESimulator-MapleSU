@@ -398,6 +398,15 @@ async function loadSoterCerts() {
     }
 }
 
+const keyboxWarning = () => document.getElementById("keybox-warning");
+
+/* The module deliberately does nothing without a keybox; surface that as a banner
+   rather than leaving the user to infer it from an empty certificate panel. */
+function setKeyboxWarning(show) {
+    const node = keyboxWarning();
+    if (node) node.hidden = !show;
+}
+
 async function loadKeyboxes() {
     const card = keyboxCard();
     const readonly = readOnlyReason("keybox", "KeyBox", "keyboxes");
@@ -436,6 +445,7 @@ async function loadKeyboxes() {
         UI.keyboxApply.disabled = !available.length;
         clearFailure("keybox");
         PanelStatus.clear(card);
+        setKeyboxWarning(!data.installed);
         if (!data.installed) {
             PanelStatus.show(card, "未安装 KeyBox：请把 keybox.xml 放到 /data/adb/tricky_store/keybox.xml",
                 { readonly: true });
@@ -444,6 +454,7 @@ async function loadKeyboxes() {
         }
     } catch (err) {
         const described = Backend.describe(err);
+        setKeyboxWarning(true);
         noteFailure("keybox", "KeyBox", err);
         UI.keyboxActiveTag.textContent = tagText(described.level);
         UI.keyboxActiveTag.classList.remove("tag-outline");
