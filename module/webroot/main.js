@@ -458,7 +458,8 @@ async function loadKeyboxes() {
             }
             PanelStatus.show(card, reason, { readonly: true });
         } else if (!available.length) {
-            PanelStatus.show(card, "没有可用的内置 KeyBox", { readonly: true });
+            PanelStatus.show(card,
+                "已使用自定义 KeyBox（内置源不可用，切换已禁用）", { readonly: true });
         }
     } catch (err) {
         const described = Backend.describe(err);

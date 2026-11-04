@@ -580,7 +580,13 @@ keyboxes_json() {
         _item_active=true
     else
         _act_name='自定义（非内置）'
-        _act_short='unknown'
+        # Show the real short hash of the file the daemon actually uses.
+        _act_sha=$(sha256_file "$KEYBOX_XML_DST" 2>/dev/null) || _act_sha=
+        if [ -n "$_act_sha" ]; then
+            _act_short=$(short_sha "$_act_sha")
+        else
+            _act_short='unknown'
+        fi
         _item_active=false
     fi
     [ -n "${_cur_name:-}" ] || _cur_name=$KEYBOX_NAME

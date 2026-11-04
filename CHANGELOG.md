@@ -4,6 +4,11 @@
 
 ## v6.0.30 — 2026-11-04
 
+### 修订（6.0.30 最终构建）
+- `keyboxes` 增加 `probe{path,exists,size,uid}`；WebUI 区分「不存在 / 0 字节 / 不可读」三种状态。
+- 已配置自定义 KeyBox 时显示真实短 SHA，并在无内置源时提示「已使用自定义 KeyBox」。
+- KeyBox 标签在未安装时显示「未配置」。
+
 ### 新增
 - **`module.prop` 增加 `updateJson`**，指向仓库根目录的 `update.json`；
   KernelSU / Magisk 可直接在模块列表里检查更新。
