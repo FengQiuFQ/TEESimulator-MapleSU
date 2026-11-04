@@ -431,11 +431,17 @@ async function loadKeyboxes() {
             : "自定义");
         text(UI.keyboxActiveTag, data.active_id === "custom" ? "自定义" : "当前生效");
         UI.keyboxActiveTag.classList.toggle("tag-outline", data.active_id === "custom");
-        UI.keyboxSelect.disabled = false;
-        UI.keyboxApply.disabled = !items.length;
+        const available = items.filter((it) => it.available !== false);
+        UI.keyboxSelect.disabled = !available.length;
+        UI.keyboxApply.disabled = !available.length;
         clearFailure("keybox");
         PanelStatus.clear(card);
-        if (!items.length) PanelStatus.show(card, "没有可用的内置 KeyBox", { readonly: true });
+        if (!data.installed) {
+            PanelStatus.show(card, "未安装 KeyBox：请把 keybox.xml 放到 /data/adb/tricky_store/keybox.xml",
+                { readonly: true });
+        } else if (!available.length) {
+            PanelStatus.show(card, "没有可用的内置 KeyBox", { readonly: true });
+        }
     } catch (err) {
         const described = Backend.describe(err);
         noteFailure("keybox", "KeyBox", err);

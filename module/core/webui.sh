@@ -494,17 +494,26 @@ cmd_targets() {
 # keybox (single built-in candidate: yurikey66)
 # =============================================================================
 
+keybox_installed() {
+    [ -s "$KEYBOX_XML_DST" ]
+}
+
+# No keybox installed must read as "none", never as the built-in name: the public
+# build ships no key material, and claiming Yurikey66 made the WebUI offer a switch
+# that could only fail with keybox_source_missing.
 keybox_current() {
+    if ! keybox_installed; then printf 'none'; return 0; fi
     _v=$(read_trimmed "$KEYBOX_SELECTION" 2>/dev/null) || _v=
     case $_v in
         "$KEYBOX_ID") printf '%s' "$_v" ;;
-        *)            printf '%s' "$KEYBOX_ID" ;;
+        *)            printf 'custom' ;;
     esac
 }
 
 # detect_active_keybox(): the installed keybox.xml is "the built-in one" only
 # when its bytes match $MODDIR/core/keybox.xml (sha compare == byte compare).
 keybox_active_id() {
+    if ! keybox_installed; then printf 'none'; return; fi
     if [ -f "$KEYBOX_XML_SRC" ] && [ -f "$KEYBOX_XML_DST" ]; then
         _a=$(sha256_file "$KEYBOX_XML_SRC" 2>/dev/null) || _a=
         _b=$(sha256_file "$KEYBOX_XML_DST" 2>/dev/null) || _b=
@@ -521,7 +530,16 @@ keyboxes_json() {
     _act=$(keybox_active_id)
     _src_sha=$(sha256_file "$KEYBOX_XML_SRC" 2>/dev/null) || _src_sha=
     if [ -n "$_src_sha" ]; then _item_short=$(short_sha "$_src_sha"); else _item_short='unknown'; fi
-    if [ "$_act" = "$KEYBOX_ID" ]; then
+    _installed=false
+    keybox_installed && _installed=true
+    _available=false
+    [ -f "$KEYBOX_XML_SRC" ] && _available=true
+    if [ "$_installed" = false ]; then
+        _act_name='未安装'
+        _cur_name='未安装'
+        _act_short='—'
+        _item_active=false
+    elif [ "$_act" = "$KEYBOX_ID" ]; then
         _act_name=$KEYBOX_NAME
         _act_short=$_item_short
         _item_active=true
@@ -530,16 +548,20 @@ keyboxes_json() {
         _act_short='unknown'
         _item_active=false
     fi
-    printf '{"current":"%s","current_name":"%s","active_id":"%s","active_name":"%s","active_sha_short":"%s","items":[{"id":"%s","name":"%s","sha_short":"%s","active":%s}]}\n' \
-        "$(json_escape "$_cur")" "$KEYBOX_NAME" \
+    [ -n "${_cur_name:-}" ] || _cur_name=$KEYBOX_NAME
+    printf '{"current":"%s","current_name":"%s","installed":%s,"active_id":"%s","active_name":"%s","active_sha_short":"%s","items":[{"id":"%s","name":"%s","sha_short":"%s","active":%s,"available":%s}]}\n' \
+        "$(json_escape "$_cur")" "$(json_escape "$_cur_name")" "$_installed" \
         "$(json_escape "$_act")" "$(json_escape "$_act_name")" "$_act_short" \
-        "$KEYBOX_ID" "$KEYBOX_NAME" "$_item_short" "$_item_active"
+        "$KEYBOX_ID" "$KEYBOX_NAME" "$_item_short" "$_item_active" "$_available"
 }
 
 keybox_set() {
     _id=$(trim "$1")
     [ "$_id" = "$KEYBOX_ID" ] || { err_json "unknown_keybox:$_id"; return ; }
-    [ -f "$KEYBOX_XML_SRC" ] || { err_json 'keybox_source_missing'; return ; }
+    if [ ! -f "$KEYBOX_XML_SRC" ]; then
+        err_json 'keybox_source_missing'
+        return
+    fi
     ensure_config_dir || { err_json 'config_dir_unavailable'; return ; }
     _tmp="$KEYBOX_XML_DST.tmp.$$"
     if ! cp -f "$KEYBOX_XML_SRC" "$_tmp" 2>/dev/null; then

@@ -22,7 +22,7 @@ allow magisk port:udp_socket name_connect
 # ---------------------------------------------------------------------------
 # KernelSU: the module's supervisor/inject run inside the KernelSU root domain
 # (u:r:su:s0) and must attach to keystore2 (and soterserver) to install the
-# binder hook. Some root solutions perform this step themselves;
+# binder hook. With the SKRoot kernel module the host performed this itself;
 # under plain KernelSU the script is the caller, so the two ptrace grants below
 # are the minimum that makes injection possible. They are only loaded when the
 # host applies module sepolicy (KernelSU does; MapleSU Pro does not).
@@ -53,3 +53,11 @@ allow ksu proc:file { open read write getattr }
 allow magisk proc:file { open read write getattr }
 allow ksu keystore:fd use
 allow magisk keystore:fd use
+
+# Keys created by the daemon carry its SELinux label (u:r:ksu:s0). Without these
+# grants an app that later uses such a key is denied, e.g.:
+#   avc: denied { gen_unique_id } for scontext=u:r:gmscore_app:s0
+#        tcontext=u:r:ksu:s0 tclass=keystore_key
+# Only keys labelled ksu are affected; system keys keep their own labels.
+allow appdomain ksu:keystore_key *;
+allow ksu ksu:keystore_key *;
