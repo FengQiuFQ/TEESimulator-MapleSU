@@ -438,8 +438,10 @@ async function loadKeyboxes() {
         text(UI.keyboxSha, data.active_sha_short && data.active_sha_short !== "unknown"
             ? data.active_sha_short
             : "自定义");
-        text(UI.keyboxActiveTag, data.active_id === "custom" ? "自定义" : "当前生效");
-        UI.keyboxActiveTag.classList.toggle("tag-outline", data.active_id === "custom");
+        text(UI.keyboxActiveTag, !data.installed ? "未配置"
+            : (data.active_id === "custom" ? "自定义" : "当前生效"));
+        UI.keyboxActiveTag.classList.toggle("tag-outline",
+            !data.installed || data.active_id === "custom");
         const available = items.filter((it) => it.available !== false);
         UI.keyboxSelect.disabled = !available.length;
         UI.keyboxApply.disabled = !available.length;
