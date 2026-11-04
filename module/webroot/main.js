@@ -1496,3 +1496,83 @@ async function onReady() {
 }
 
 document.addEventListener("DOMContentLoaded", onReady);
+
+/* ---- diagnostics: verbose logging toggle + log export ------------------- */
+(function diagnostics() {
+    const toggle = document.getElementById("toggle-debug");
+    const button = document.getElementById("btn-export-logs");
+    const sub = document.getElementById("diag-sub");
+    const hint = document.getElementById("diag-hint");
+    if (!toggle || !button || !sub) return;
+
+    if (!Backend.isKsu()) {
+        /* the native (Ultra) backend has no log endpoint; stay honest about it */
+        sub.textContent = "仅 KernelSU 后端支持";
+        button.disabled = true;
+        toggle.disabled = true;
+        return;
+    }
+
+    const setBusy = (busy) => {
+        button.disabled = busy;
+        toggle.disabled = busy;
+    };
+
+    const refresh = async () => {
+        try {
+            const data = await Backend.call("get debug");
+            toggle.checked = !!(data && data.enabled);
+            sub.textContent = toggle.checked ? "已开启 · 记录更详细的日志" : "已关闭 · 仅记录关键事件";
+            toggle.disabled = false;
+            button.disabled = false;
+        } catch (err) {
+            const described = Backend.describe(err);
+            sub.textContent = described.text;
+            toggle.disabled = true;
+            button.disabled = true;
+        }
+    };
+
+    toggle.addEventListener("change", async () => {
+        const want = toggle.checked;
+        setBusy(true);
+        try {
+            await Backend.call("set debug", want ? "1" : "0");
+            sub.textContent = want ? "已开启 · 记录更详细的日志" : "已关闭 · 仅记录关键事件";
+            if (typeof showToast === "function") showToast(want ? "详细日志已开启" : "详细日志已关闭");
+        } catch (err) {
+            toggle.checked = !want;
+            sub.textContent = Backend.describe(err).text;
+        } finally {
+            setBusy(false);
+        }
+    });
+
+    button.addEventListener("click", async () => {
+        setBusy(true);
+        const previous = sub.textContent;
+        sub.textContent = "正在导出…";
+        try {
+            const result = await Backend.call("logs");
+            const path = (result && result.path) || "";
+            const bytes = (result && result.bytes) || 0;
+            sub.textContent = path ? "已导出：" + path : "已导出";
+            if (hint) {
+                hint.textContent = path
+                    ? "文件大小 " + bytes + " 字节。提交前请再检查一遍，确认没有个人信息。"
+                    : "导出完成，但未返回路径。";
+            }
+            if (path && navigator.clipboard) {
+                navigator.clipboard.writeText(path).catch(() => {});
+            }
+            if (typeof showToast === "function") showToast("日志已导出");
+        } catch (err) {
+            sub.textContent = Backend.describe(err).text;
+        } finally {
+            setBusy(false);
+            if (sub.textContent === "正在导出…") sub.textContent = previous;
+        }
+    });
+
+    refresh();
+})();

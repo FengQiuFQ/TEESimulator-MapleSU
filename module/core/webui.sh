@@ -1317,6 +1317,80 @@ cmd_boot_apply() {
 # mode/backend are the two KSU-only additions and are always "ksu" here)
 # =============================================================================
 
+
+# --- diagnostics (verbose logging + log export) -----------------------------
+
+DEBUG_FLAG="$CONFIG_DIR/debug-on"
+
+get_debug() {
+    if [ -f "$DEBUG_FLAG" ]; then _on=true; else _on=false; fi
+    printf '{"ok":true,"enabled":%s,"path":"%s"}\n' "$_on" "$(json_escape "$DEBUG_FLAG")"
+}
+
+set_debug() {
+    case ${1:-} in
+        1|on|true)
+            ensure_config_dir || { err_json "config_unavailable"; return; }
+            : > "$DEBUG_FLAG" 2>/dev/null || { err_json "write_failed"; return; }
+            chmod 0644 "$DEBUG_FLAG" 2>/dev/null
+            ;;
+        0|off|false)
+            rm -f "$DEBUG_FLAG" 2>/dev/null
+            ;;
+        *)
+            err_json "bad_value:${1:-}"
+            return
+            ;;
+    esac
+    get_debug
+}
+
+# Collect a trimmed, redacted diagnostic bundle. Returns the path plus a short
+# preview so the WebUI can show something even when it cannot open files.
+cmd_logs() {
+    _dir=/sdcard/Download
+    [ -d "$_dir" ] || _dir=/data/local/tmp
+    _stamp=$(date +%Y%m%d-%H%M%S 2>/dev/null)
+    _out="$_dir/teesim-diag-$_stamp.txt"
+    if ! : > "$_out" 2>/dev/null; then
+        _dir=/data/local/tmp
+        _out="$_dir/teesim-diag-$_stamp.txt"
+        : > "$_out" 2>/dev/null || { err_json "write_failed"; return; }
+    fi
+
+    {
+        printf 'generated: %s\n' "$_stamp"
+        printf 'module: %s\n' "$(sed -n 's/^version=//p' "$MODDIR/module.prop" 2>/dev/null)"
+        printf '\n[device]\n'
+        getprop ro.product.model; getprop ro.build.version.release
+        getprop ro.build.version.sdk; getprop ro.product.cpu.abi
+        printf '\n[ksu_status]\n'; cat "$CONFIG_DIR/ksu_status" 2>/dev/null
+        printf '\n[soter_route]\n'; cat "$CONFIG_DIR/soter_route" 2>/dev/null
+        printf '\n[targets]\n'; grep -vc '^#' "$CONFIG_DIR/target.txt" 2>/dev/null
+        printf '\n[injection]\n'
+        _ks=$(pidof keystore2 2>/dev/null)
+        printf 'keystore2=%s maps=%s\n' "$_ks" \
+            "$([ -n "$_ks" ] && grep -c libTEESimulator "/proc/$_ks/maps" 2>/dev/null)"
+        _ss=$(pidof com.tencent.soter.soterserver 2>/dev/null)
+        printf 'soterserver=%s maps=%s\n' "${_ss:-not-running}" \
+            "$([ -n "$_ss" ] && grep -c libTEESimulator "/proc/$_ss/maps" 2>/dev/null)"
+        printf '\n[logcat TEESimulator]\n'
+        logcat -d -s TEESimulator:V 2>/dev/null | tail -n 200
+        printf '\n[logcat MPL-SOTER]\n'
+        logcat -d -s MPL-SOTER:V 2>/dev/null | tail -n 120
+        printf '\n[avc denials]\n'
+        logcat -d 2>/dev/null | grep -i 'avc:.*denied' | tail -n 40
+    } >> "$_out" 2>&1
+
+    sed -i -E 's/([Ss]erial(Number)?[=: ]+)[A-Za-z0-9._-]+/\1<redacted>/g' "$_out" 2>/dev/null
+    sed -i -E 's/(android_id[=: ]+)[0-9a-fA-F]+/\1<redacted>/g' "$_out" 2>/dev/null
+
+    _bytes=$(wc -c < "$_out" 2>/dev/null | tr -d ' ')
+    _prev=$(head -c 400 "$_out" 2>/dev/null)
+    printf '{"ok":true,"path":"%s","bytes":%s,"preview":"%s"}\n' \
+        "$(json_escape "$_out")" "${_bytes:-0}" "$(json_escape "$_prev")"
+}
+
 cmd_info() {
     _ver=$(module_version)
     _vcode=$(module_version_code)
@@ -1331,7 +1405,7 @@ cmd_info() {
         _kb_short=unknown
     fi
     _soter=$(get_soter)
-    printf '{"module":"TEESimulator-RS","version":"%s","author":"%s","dex_sha256":"%s","dex_short":"%s","keybox_short":"%s","keybox_current":"%s","keybox_active":"%s","soter_forge":%s,"build":"%s","mode":"ksu","backend":"ksu","features":["info","get soter","set soter","get soter_certs","set soter_certs","get hide_bootloader","set hide_bootloader","get auto_third_app","set auto_third_app","get patch","set patch","keyboxes","keybox_set","kbu_status","kbu_config","kbu_now","scope list","scope set","scope setall","targets"],"unsupported":["get fix_tee","set fix_tee"],"features_note":"target.txt accepts both prefix (!pkg/?pkg, dex) and suffix (pkg!/pkg?, upstream) markers"}\n' \
+    printf '{"module":"TEESimulator-RS","version":"%s","author":"%s","dex_sha256":"%s","dex_short":"%s","keybox_short":"%s","keybox_current":"%s","keybox_active":"%s","soter_forge":%s,"build":"%s","mode":"ksu","backend":"ksu","features":["info","get soter","set soter","get soter_certs","set soter_certs","get hide_bootloader","set hide_bootloader","get auto_third_app","set auto_third_app","get patch","set patch","keyboxes","keybox_set","kbu_status","kbu_config","kbu_now","scope list","scope set","scope setall","targets","get debug","set debug","logs"],"unsupported":["get fix_tee","set fix_tee"],"features_note":"target.txt accepts both prefix (!pkg/?pkg, dex) and suffix (pkg!/pkg?, upstream) markers"}\n' \
         "$(json_escape "$_ver")" "$(json_escape "$MOD_AUTHOR")" \
         "$_dex_sha" "$_dex_short" "$_kb_short" \
         "$(json_escape "$_cur")" "$(json_escape "$_act")" \
@@ -1359,6 +1433,7 @@ case $CMD in
             auto_third_app)  get_auto_third_app ;;
             fix_tee)         get_fix_tee ;;
             patch)           patch_json ;;
+            debug)           get_debug ;;
             *)               err_json "unsupported:get $SUB" ;;
         esac
         ;;
@@ -1382,6 +1457,7 @@ case $CMD in
                 fi
                 ;;
             patch) set_patch "$VAL" ;;
+            debug) set_debug "$VAL" ;;
             soter_certs) set_soter_certs "$VAL" ;;
             *)     err_json "unsupported:set $SUB" ;;
         esac
@@ -1395,6 +1471,9 @@ case $CMD in
     kbu_status)
         load_kbu_conf
         kbu_status_json
+        ;;
+    logs)
+        cmd_logs
         ;;
     targets)
         cmd_targets

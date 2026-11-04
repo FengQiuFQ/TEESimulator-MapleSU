@@ -568,6 +568,20 @@ const Backend = (() => {
             ksu: ["targets"], mode: "blob",
             http: () => post("/getTargetTxt"),
         },
+        /* ---- 诊断 ---- */
+        "get debug": {
+            ksu: ["get", "debug"],
+            http: () => getJson("/debug"),
+        },
+        "set debug": {
+            ksu: ["set", "debug"], mode: "ack",
+            arg: (args) => [args[0] ? "1" : "0"],
+            http: (args) => postJson("/debug", JSON.stringify({ enabled: !!args[0] })),
+        },
+        logs: {
+            ksu: ["logs"], timeout: 30000,
+            http: () => post("/logs"),
+        },
     };
 
     function isKsu() {
