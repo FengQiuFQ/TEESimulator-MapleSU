@@ -97,7 +97,7 @@ OUT = os.path.join(ROOT, "manager", "src", "main", "assets", "maplesu", "bundled
 # bridge), so the same front-end the Pro build serves over HTTP ships here too.
 WEBROOT = os.path.join(ROOT, "work", "tee13", "src", "testModule",
                        "module_TEESimulatorRS", "resources", "webroot")
-WEBROOT_FILES = ["index.html", "main.js", "request.js", "style.css", "toast.css", "toast.js"]
+WEBROOT_FILES = ["index.html", "main.js", "request.js", "i18n.js", "style.css", "toast.css", "toast.js"]
 
 # KSU/Lite WebUI backend (shipped as core/webui.sh, mode 0755). The front end calls
 # `sh $MODDIR/core/webui.sh <cmd>` through window.ksu.exec, so the path is a
@@ -142,8 +142,8 @@ PRO_KEYBOX_SHA256 = "b7629b3d348c7386b397966111c0ef3b3d9fa9eef4e2d715a64fef6740b
 
 MODULE_PROP = """id=tricky_store
 name=TEESimulator-RS_MapleSU
-version=6.0.33_MapleSU
-versionCode=63300
+version=6.0.35_MapleSU
+versionCode=63500
 author=TEESimulator-RS / MapleSU
 description=频道：@MapleAutumn MapleSU_Normal定制版.Hardware-backed key attestation simulator, bundled and default-installed by MapleSU. By.MapleAutumn Customized Fixed Soter. 解决TEESimulator-RS目前已知所有检测点与Soter.
 updateJson=https://raw.githubusercontent.com/FengQiuFQ/TEESimulator-MapleSU/main/update.json
@@ -202,7 +202,7 @@ ui_print "- Extracting module files"
 for f in module.prop service.sh uninstall.sh sepolicy.rule hide_bootloader.sh \
          classes.dex daemon inject supervisor libTEESimulator.so libcertgen.so \
          resetprop keybox.xml target.txt core/webui.sh \
-         webroot/index.html webroot/main.js webroot/request.js \
+         webroot/index.html webroot/main.js webroot/request.js webroot/i18n.js \
          webroot/style.css webroot/toast.css webroot/toast.js ; do
   install_file "$f"
 done

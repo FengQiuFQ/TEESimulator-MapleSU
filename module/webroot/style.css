@@ -25,7 +25,7 @@
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }
-html, body { margin: 0; min-height: 100%; }
+html, body { margin: 0; min-height: 100%; max-width: 100%; overflow-x: hidden; }
 body {
     background: var(--bg); color: var(--text);
     font: 15px/1.6 system-ui, -apple-system, "Segoe UI", "Noto Sans SC", sans-serif;
@@ -43,10 +43,17 @@ button:active:not(:disabled) { transform: scale(.97); }
 .brand { display: flex; align-items: center; gap: 12px; padding: 8px 4px 10px; }
 .brand-mark { width: 46px; height: 46px; flex: none; border-radius: 16px; display: grid; place-items: center; background: var(--red-soft); color: var(--accent); font-weight: 700; font-size: 17px; }
 .brand-text { flex: 1; min-width: 0; }
-.brand-text h1 { margin: 0; font-size: 26px; font-weight: 700; line-height: 1.25; letter-spacing: -.5px; }
+.brand-text h1 { overflow-wrap: anywhere; margin: 0; font-size: 26px; font-weight: 700; line-height: 1.25; letter-spacing: -.5px; }
 .brand-text p { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
 .dot-sep { margin: 0 5px; }
 .brand-actions { display: flex; gap: 6px; }
+
+/* 语言切换：中 / EN 胶囊，与头部按钮同高 */
+.lang-switch { display: inline-flex; align-items: center; gap: 2px; height: 44px; padding: 3px; border-radius: 16px; background: var(--card); }
+.lang-switch button { min-width: 34px; height: 38px; padding: 0 8px; border: 0; border-radius: 13px; background: none; color: var(--text-2); font-size: 12px; font-weight: 650; letter-spacing: .02em; transition: background .15s ease, color .15s ease; }
+.lang-switch button.active { background: var(--accent); color: #fff; }
+.lang-switch button:not(.active):hover { color: var(--text); }
+
 .snow-btn { width: 44px; height: 44px; border: 0; border-radius: 16px; background: var(--card); color: var(--text-2); }
 .snow-btn[aria-pressed="true"] { color: var(--accent); }
 .load-status { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -3px 4px 0; min-height: 40px; color: var(--muted); font-size: 13px; }
@@ -173,3 +180,13 @@ dialog > .btn { width: 100%; margin-top: 20px; }
 .alert-warn b { font-size: 0.98em; }
 .alert-warn span { font-size: 0.86em; opacity: 0.85; }
 .alert-warn[hidden] { display: none; }
+
+@media (max-width: 420px) {
+    .brand { gap: 8px; padding: 6px 2px 8px; }
+    .brand-actions { gap: 4px; }
+    .brand-text h1 { font-size: 21px; }
+    .brand-text p { font-size: 11px; }
+    .lang-switch { height: 40px; padding: 2px; border-radius: 14px; }
+    .lang-switch button { min-width: 30px; height: 36px; padding: 0 6px; border-radius: 12px; font-size: 11px; }
+    .snow-btn { width: 40px; height: 40px; border-radius: 14px; }
+}

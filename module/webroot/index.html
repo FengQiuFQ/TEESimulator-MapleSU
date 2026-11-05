@@ -37,6 +37,10 @@
                 <p>密钥与证书管理<span class="dot-sep">·</span><span id="module-version">读取中…</span></p>
             </div>
             <div class="brand-actions">
+                <div class="lang-switch" id="lang-switch" role="group" aria-label="语言 / Language">
+                    <button type="button" data-lang="zh" aria-pressed="true">中</button>
+                    <button type="button" data-lang="en" aria-pressed="false">EN</button>
+                </div>
                 <button id="btn-theme" class="snow-btn" type="button" aria-label="界面风格">◐</button>
                 <button id="btn-snow" class="snow-btn" type="button" aria-pressed="true" aria-label="枫叶飘落" title="枫叶飘落">叶</button>
             </div>
@@ -316,6 +320,7 @@
     </dialog>
     <div id="toast" class="toast" role="status"></div>
 
+    <script src="i18n.js"></script>
     <script src="toast.js"></script>
     <script src="request.js"></script>
     <script src="main.js"></script>
