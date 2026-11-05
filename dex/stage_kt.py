@@ -112,6 +112,23 @@ def apply(tree, log=None):
         text = text.replace(".method public final forgetDeletedKey(", MARKER, 1)
     if OLD_REMOVE in text:
         text = text.replace(OLD_REMOVE, NEW_CONTAINS, 1)
+
+    # G02b: the deleted-key reply used v6, which the surrounding code reuses for a uid
+    # and other values; send an explicit KEY_NOT_FOUND (7) instead of a stale register.
+    text = _read(k2)
+    log_marker = "Returning KEY_NOT_FOUND for deleted key"
+    stale = "    invoke-virtual {v0, v6}, Lorg/matrix/TEESimulator/interception/keystore/InterceptorUtils;->createErrorReply(I)Lv4/d;"
+    fixed = ("    const/4 v1, 0x7
+
+"
+             "    invoke-virtual {v0, v1}, Lorg/matrix/TEESimulator/interception/keystore/InterceptorUtils;->createErrorReply(I)Lv4/d;")
+    pos = text.find(log_marker)
+    if pos != -1:
+        hit = text.find(stale, pos)
+        if hit != -1:
+            text = text[:hit] + fixed + text[hit + len(stale):]
+            _write(k2, text)
+
     _write(k2, text)
 
     text = _read(shim)
