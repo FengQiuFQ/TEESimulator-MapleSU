@@ -61,3 +61,10 @@ allow magisk keystore:fd use
 # Only keys labelled ksu are affected; system keys keep their own labels.
 allow appdomain ksu:keystore_key *;
 allow ksu ksu:keystore_key *;
+
+# The vendor perf HAL walks /proc looking for its helper process; every ksu-labelled
+# entry makes that walk log an avc denial (and can fail the boost). Grant the search
+# only; no process control is added.
+allow vendor_hal_perf_default ksu:dir search;
+allow vendor_hal_perf_default ksu:file { open read getattr };
+allow vendor_hal_perf_default ksu:process getattr;

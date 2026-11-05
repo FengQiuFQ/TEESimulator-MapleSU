@@ -28,45 +28,15 @@ import subprocess
 import sys
 import zlib
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-HERE = os.path.join(ROOT, "dex")
-BASE = os.path.join(HERE, "smali_base")
+REPO = r"D:\Maple_Workflow\MapleSU"
+BASE = os.path.join(REPO, "work", "soter-app-lane", "dex", "smali_p15")
+HERE = os.path.join(REPO, "work", "tee16-fix", "dex")
 TREE = os.path.join(HERE, "smali_tree")
-JARS = os.path.join(HERE, "tools", "jars")
-
-SDK = os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT") or ""
-if not SDK:
-    sys.exit("ANDROID_HOME / ANDROID_SDK_ROOT is not set")
-ANDROID_JAR = None
-platforms = os.path.join(SDK, "platforms")
-if os.path.isdir(platforms):
-    candidates = sorted(p for p in os.listdir(platforms) if p.startswith("android-"))
-    for candidate in reversed(candidates):
-        jar = os.path.join(platforms, candidate, "android.jar")
-        if os.path.isfile(jar):
-            ANDROID_JAR = jar
-            break
-if not ANDROID_JAR:
-    sys.exit("android.jar not found under " + platforms)
-
-D8 = None
-build_tools = os.path.join(SDK, "build-tools")
-if os.path.isdir(build_tools):
-    for candidate in sorted(os.listdir(build_tools), reverse=True):
-        d8 = os.path.join(build_tools, candidate, "d8.bat")
-        if os.path.isfile(d8):
-            D8 = d8
-            break
-        d8 = os.path.join(build_tools, candidate, "d8")
-        if os.path.isfile(d8):
-            D8 = d8
-            break
-
-JAVA_HOME = os.environ.get("JAVA_HOME", "")
-JAVAC = os.path.join(JAVA_HOME, "bin", "javac.exe" if os.name == "nt" else "javac")
-if not os.path.isfile(JAVAC):
-    JAVAC = "javac"
-
+JARS = os.path.join(REPO, ".analysis", "pro-integration-implementation-20261027",
+                    "tee-package-08", "work", "jars")
+SDK = r"D:\Maple_Env\Android\Sdk"
+ANDROID_JAR = os.path.join(SDK, "platforms", "android-35", "android.jar")
+D8 = os.path.join(SDK, "build-tools", "37.0.0", "d8.bat")
 JAVAC = r"C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot\bin\javac.exe"
 DEX = os.path.join(HERE, "classes_p16.dex")
 LOG = os.path.join(HERE, "build.log")
@@ -1447,6 +1417,12 @@ def stage_y():
                "u4/g.i(): target.txt 原生后缀 pkg!/pkg? + 前缀 !pkg/?pkg 归一化")
 
 
+try:
+    import stage_kt as _stage_kt
+except Exception:  # pragma: no cover - stage is optional for old checkouts
+    _stage_kt = None
+
+
 def main():
     stages = sys.argv[1:] or STAGES
     if os.path.isdir(TREE):
@@ -1493,6 +1469,8 @@ def main():
     # "… s s4 m p" 命令重编也不会把这处修复丢掉；stage_y 自身幂等。
     if "y" in stages or "m" in stages:
         stage_y()
+    if _stage_kt is not None:
+        _stage_kt.apply(TREE, log)
     build_mpl()
     assemble(DEX)
     diff_surface()

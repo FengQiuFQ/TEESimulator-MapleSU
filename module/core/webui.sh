@@ -82,6 +82,7 @@ SOTER_IDENTITY_DIR=$CONFIG_DIR/soter_identity
 HIDE_BOOTLOADER_FLAG=$CONFIG_DIR/hide_bootloader_toggle
 HIDE_BOOTLOADER_MARKER=$CONFIG_DIR/hide_bootloader
 AUTO_THIRD_FLAG=$CONFIG_DIR/auto_third_app_toggle
+KEY_TAKEOVER_FLAG=$CONFIG_DIR/key_takeover
 KBU_CONF=$CONFIG_DIR/keybox_update.conf
 KBU_TMP=$CONFIG_DIR/keybox.xml.download.tmp
 KSU_STATUS=$CONFIG_DIR/ksu_status
@@ -1461,6 +1462,7 @@ cmd_logs() {
         getprop ro.build.version.sdk; getprop ro.product.cpu.abi
         printf '\n[ksu_status]\n'; cat "$CONFIG_DIR/ksu_status" 2>/dev/null
         printf '\n[soter_route]\n'; cat "$CONFIG_DIR/soter_route" 2>/dev/null
+        printf '\n[key_takeover]\n'; get_key_takeover
         printf '\n[keybox live]\n'
         if keybox_installed; then
             printf 'installed=yes size=%s sha=%s\n' \
@@ -1529,13 +1531,24 @@ cmd_target_watch() {
     chmod 0644 "$_pidfile" 2>/dev/null
     trap 'rm -f "$_pidfile" 2>/dev/null' EXIT INT TERM
     printf '{"ok":true,"running":true,"pid":%s,"interval":%s}\n' "$$" "$_interval"
+    _ticks=0
+    _last_sig=
     while :; do
-        if [ "$(read_flag "$AUTO_THIRD_FLAG" 1)" = 1 ]; then
+        # A package install/removal changes /data/app's mtime; stat is cheap, while
+        # `pm list packages` spawns app_process and keeps the CPU/binder busy. Only
+        # that change (or a 30-minute safety pass) triggers a real refresh.
+        _sig=$(stat -c %Y /data/app 2>/dev/null)
+        _due=0
+        [ "$_sig" != "$_last_sig" ] && _due=1
+        [ $((_ticks % 60)) -eq 0 ] && _due=1
+        if [ "$_due" = 1 ] && [ "$(read_flag "$AUTO_THIRD_FLAG" 1)" = 1 ]; then
             refresh_target_txt >/dev/null 2>&1 \
                 || log_line 'target-watch: refresh skipped'
+            _last_sig=$_sig
         fi
         # KeyBox: only talks to the network when an update is actually due.
         kbu_tick >/dev/null 2>&1 || log_line 'target-watch: kbu tick failed'
+        _ticks=$((_ticks + 1))
         sleep "$_interval"
     done
 }
@@ -1595,6 +1608,32 @@ soter_warm() {
         "$([ "$_started" = 1 ] && echo true || echo false)" "$(json_escape "${_tried# }")"
 }
 
+
+# Experimental: answer KEY_NOT_FOUND for unknown KeyIds of target apps so they
+# regenerate the key through the simulator (see mpl.KeyTakeover).
+get_key_takeover() {
+    if [ -f "$KEY_TAKEOVER_FLAG" ]; then printf '1\n'; else printf '0\n'; fi
+}
+
+set_key_takeover() {
+    case $(to_lower "$(trim "${1:-}")") in
+        1|true|on|yes)
+            ensure_config_dir || { err_json 'config_dir_unavailable'; return; }
+            : > "$KEY_TAKEOVER_FLAG" 2>/dev/null || { err_json 'write_failed'; return; }
+            chmod 0644 "$KEY_TAKEOVER_FLAG" 2>/dev/null
+            ;;
+        0|false|off|no)
+            rm -f "$KEY_TAKEOVER_FLAG" 2>/dev/null
+            ;;
+        *)
+            err_json "bad_value:${1:-}"
+            return
+            ;;
+    esac
+    log_line "set key_takeover=$(get_key_takeover)"
+    printf 'OK\n'
+}
+
 cmd_info() {
     _ver=$(module_version)
     _vcode=$(module_version_code)
@@ -1609,7 +1648,7 @@ cmd_info() {
         _kb_short=unknown
     fi
     _soter=$(get_soter)
-    printf '{"module":"TEESimulator-RS","version":"%s","author":"%s","dex_sha256":"%s","dex_short":"%s","keybox_short":"%s","keybox_current":"%s","keybox_active":"%s","soter_forge":%s,"build":"%s","mode":"ksu","backend":"ksu","features":["info","get soter","set soter","get soter_certs","set soter_certs","get hide_bootloader","set hide_bootloader","get auto_third_app","set auto_third_app","get patch","set patch","keyboxes","keybox_set","keybox_reload","kbu_status","kbu_config","kbu_now","scope list","scope set","scope setall","targets","get debug","set debug","logs","target-watch","kbu-tick","soter-warm"],"unsupported":["get fix_tee","set fix_tee"],"features_note":"target.txt accepts both prefix (!pkg/?pkg, dex) and suffix (pkg!/pkg?, upstream) markers"}\n' \
+    printf '{"module":"TEESimulator-RS","version":"%s","author":"%s","dex_sha256":"%s","dex_short":"%s","keybox_short":"%s","keybox_current":"%s","keybox_active":"%s","soter_forge":%s,"build":"%s","mode":"ksu","backend":"ksu","features":["info","get soter","set soter","get soter_certs","set soter_certs","get hide_bootloader","set hide_bootloader","get auto_third_app","set auto_third_app","get patch","set patch","keyboxes","keybox_set","keybox_reload","kbu_status","kbu_config","kbu_now","scope list","scope set","scope setall","targets","get debug","set debug","logs","target-watch","kbu-tick","soter-warm","get key_takeover","set key_takeover"],"unsupported":["get fix_tee","set fix_tee"],"features_note":"target.txt accepts both prefix (!pkg/?pkg, dex) and suffix (pkg!/pkg?, upstream) markers"}\n' \
         "$(json_escape "$_ver")" "$(json_escape "$MOD_AUTHOR")" \
         "$_dex_sha" "$_dex_short" "$_kb_short" \
         "$(json_escape "$_cur")" "$(json_escape "$_act")" \
@@ -1636,6 +1675,7 @@ case $CMD in
             hide_bootloader) get_hide_bootloader ;;
             auto_third_app)  get_auto_third_app ;;
             fix_tee)         get_fix_tee ;;
+            key_takeover)    get_key_takeover ;;
             patch)           patch_json ;;
             debug)           get_debug ;;
             *)               err_json "unsupported:get $SUB" ;;
@@ -1661,6 +1701,7 @@ case $CMD in
                 fi
                 ;;
             patch) set_patch "$VAL" ;;
+            key_takeover) set_key_takeover "$VAL" ;;
             debug) set_debug "$VAL" ;;
             soter_certs) set_soter_certs "$VAL" ;;
             *)     err_json "unsupported:set $SUB" ;;

@@ -278,6 +278,20 @@
             <p class="hint" id="diag-hint">导出到 /sdcard/Download，自动打码序列号；提交前请再检查一遍。</p>
         </details>
 
+        <!-- 实验功能 -->
+        <details class="card card-flat" id="takeover-card">
+            <summary>实验功能<span class="summary-arrow" aria-hidden="true">›</span></summary>
+            <div class="row">
+                <div class="row-main">
+                    <div class="row-title">强制重建目标应用密钥（实验）</div>
+                    <div class="row-sub" id="takeover-sub">读取中…</div>
+                </div>
+                <input type="checkbox" id="toggle-key-takeover" aria-label="强制重建目标应用密钥" disabled>
+            </div>
+            <p class="hint">开启后，target.txt 内的应用访问本模块未创建的密钥时会收到
+                KEY_NOT_FOUND，被迫重新生成密钥并走模拟路径。原有密钥可能因此不可用。</p>
+        </details>
+
         <footer class="foot">
             <p>MapleSU · TEE 模拟器</p>
             <p class="foot-sub">

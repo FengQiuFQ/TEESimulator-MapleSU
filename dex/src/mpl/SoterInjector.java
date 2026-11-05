@@ -42,7 +42,7 @@ public final class SoterInjector {
             "/data/user/0/dev.maplesu.manager/files/soter.state",
             "/data/data/dev.maplesu.manager/files/soter.state",
     };
-    private static final long POLL_MS = 400L;
+    private static final long POLL_MS = 1500L;
 
     private static volatile boolean started;
     private static volatile String publishedState;
@@ -76,14 +76,17 @@ public final class SoterInjector {
         Thread thread = new Thread(new Runnable() {
             @Override
             public void run() {
+                long startedAt = System.nanoTime();
                 while (true) {
                     try {
                         tick();
                     } catch (Throwable error) {
                         Log.w(TAG, "injector tick failed", error);
                     }
+                    long uptimeMs = (System.nanoTime() - startedAt) / 1_000_000L;
+                    long delay = uptimeMs < 90_000L ? 500L : POLL_MS;
                     try {
-                        Thread.sleep(POLL_MS);
+                        Thread.sleep(delay);
                     } catch (InterruptedException interrupted) {
                         return;
                     }

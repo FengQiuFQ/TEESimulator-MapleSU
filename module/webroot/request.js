@@ -520,6 +520,15 @@ const Backend = (() => {
             http: (args) => post("/setFixTeeToggle", String(args[0])),
         },
 
+        "get key_takeover": {
+            ksu: ["get", "key_takeover"], mode: "text",
+            http: () => post("/getKeyTakeover"),
+        },
+        "set key_takeover": {
+            ksu: ["set", "key_takeover"], mode: "ack", arg: one,
+            http: (args) => post("/setKeyTakeover", String(args[0])),
+        },
+
         /* ---- 安全补丁日期 ---- */
         "get patch": {
             ksu: ["get", "patch"], mode: "json",

@@ -1620,3 +1620,43 @@ document.addEventListener("DOMContentLoaded", onReady);
     loadKeyboxes().catch(() => {});
     setTimeout(watchKeyboxState, 10000);
 })();
+
+/* ---- experimental: force target apps to regenerate stale keys ------------- */
+(function keyTakeover() {
+    const toggle = document.getElementById("toggle-key-takeover");
+    const sub = document.getElementById("takeover-sub");
+    if (!toggle || !sub) return;
+    if (!Backend.isKsu()) {
+        sub.textContent = "仅 KernelSU 后端支持";
+        return;
+    }
+    const set = (on) => {
+        sub.textContent = on ? "已开启 · 未知 KeyId 返回 KEY_NOT_FOUND" : "已关闭 · 未知 KeyId 转发真实 HAL";
+        toggle.checked = on;
+        toggle.disabled = false;
+    };
+    const load = async () => {
+        try {
+            const value = String(await Backend.call("get key_takeover")).trim();
+            set(value === "1" || value.toLowerCase() === "true");
+        } catch (err) {
+            sub.textContent = Backend.describe(err).text;
+            toggle.disabled = true;
+        }
+    };
+    toggle.addEventListener("change", async () => {
+        const want = toggle.checked;
+        toggle.disabled = true;
+        try {
+            await Backend.call("set key_takeover", want ? "1" : "0");
+            set(want);
+            if (typeof showToast === "function") showToast(want ? "已开启强制重建（实验）" : "已关闭强制重建");
+        } catch (err) {
+            sub.textContent = Backend.describe(err).text;
+            toggle.checked = !want;
+        } finally {
+            toggle.disabled = false;
+        }
+    });
+    load();
+})();

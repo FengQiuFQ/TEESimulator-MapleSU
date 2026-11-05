@@ -142,8 +142,8 @@ PRO_KEYBOX_SHA256 = "b7629b3d348c7386b397966111c0ef3b3d9fa9eef4e2d715a64fef6740b
 
 MODULE_PROP = """id=tricky_store
 name=TEESimulator-RS_MapleSU
-version=6.0.31_MapleSU
-versionCode=63100
+version=6.0.32_MapleSU
+versionCode=63200
 author=TEESimulator-RS / MapleSU
 description=频道：@MapleAutumn MapleSU_Normal定制版.Hardware-backed key attestation simulator, bundled and default-installed by MapleSU. By.MapleAutumn Customized Fixed Soter. 解决TEESimulator-RS目前已知所有检测点与Soter.
 updateJson=https://raw.githubusercontent.com/FengQiuFQ/TEESimulator-MapleSU/main/update.json
@@ -1117,6 +1117,14 @@ fi
               i=$((i + 1))
           done ) &
         log_msg "soter warm-up scheduled"
+    fi
+    # resetprop-style modules may run later in boot and overwrite the boot props;
+    # re-apply ours once after boot settles so the last writer is us.
+    if [ -f "$MODDIR/hide_bootloader.sh" ] && [ -f "$CONFIG_DIR/hide_bootloader_toggle" ]; then
+        if [ "$(tr -d ' \t\r\n' < "$CONFIG_DIR/hide_bootloader_toggle" 2>/dev/null)" != "0" ]; then
+            ( sleep 45; sh "$MODDIR/hide_bootloader.sh" >> "$BOOT_LOG" 2>&1; \
+              log_msg "hide_bootloader second pass done" ) &
+        fi
     fi
     set_status done 1
     log_msg "extras done"

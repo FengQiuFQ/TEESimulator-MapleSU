@@ -2,6 +2,23 @@
 
 所有显著变更都会记录在这里。版本号与 Release tag 对应（`vX.Y.Z`）。
 
+## v6.0.32 — 2026-11-05
+
+### 功耗
+- target watcher 不再每 30 秒执行 `pm list packages`：改为 `stat /data/app` 触发，另加 30 分钟兜底。
+- SoterBridge 轮询 1s → 5s（注入后 `kick()` 同步注册）；SoterInjector 400ms → 1.5s，启动后 90 秒内保持 500ms。
+
+### 与 resetprop 改机模块共存
+- `service.sh` 在开机后 45 秒再执行一次 `hide_bootloader.sh`，保证 `ro.boot.*` 最后写入者是我们。
+- 新增 perf HAL 读取 `ksu` 进程目录的 SELinux 规则（仅 search/read/getattr）。
+
+### 实验功能
+- WebUI 新增「强制重建目标应用密钥（实验）」开关；开启后 target.txt 内应用访问未知 KeyId 返回 `KEY_NOT_FOUND`，强制重新生成密钥。
+- 后端命令 `get/set key_takeover`，诊断导出含 `[key_takeover]`。
+
+### 构建
+- 新增 `dex/stage_kt.py` 并由 `make_p16.py` 调用，修复“每次构建重置 smali_tree 导致 H03/G02/接管补丁丢失”的问题。
+
 ## v6.0.31 — 2026-11-04
 
 ### 修复

@@ -86,7 +86,7 @@ public final class SoterBridge {
     private static final int BINDER_TYPE_BINDER = 1;
     private static final int BINDER_TYPE_HANDLE = 3;
     private static final int BIND_AUTO_CREATE = 1;
-    private static final long POLL_MS = 1000L;
+    private static final long POLL_MS = 5000L;
     private static final long HEARTBEAT_MS = 15000L;
     private static final long BIND_RETRY_MS = 5000L;
     /** w4/e registers 13 transactions (the device AIDL has 13 methods). */
