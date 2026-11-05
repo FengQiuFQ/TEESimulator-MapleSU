@@ -118,9 +118,7 @@ def apply(tree, log=None):
     text = _read(k2)
     log_marker = "Returning KEY_NOT_FOUND for deleted key"
     stale = "    invoke-virtual {v0, v6}, Lorg/matrix/TEESimulator/interception/keystore/InterceptorUtils;->createErrorReply(I)Lv4/d;"
-    fixed = ("    const/4 v1, 0x7
-
-"
+    fixed = ("    const/4 v1, 0x7\n\n"
              "    invoke-virtual {v0, v1}, Lorg/matrix/TEESimulator/interception/keystore/InterceptorUtils;->createErrorReply(I)Lv4/d;")
     pos = text.find(log_marker)
     if pos != -1:
