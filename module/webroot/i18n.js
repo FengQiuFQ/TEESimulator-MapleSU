@@ -289,6 +289,13 @@
         "失败": "Failed",
         "错误": "Error",
         "成功": "Success",
+        "搜索应用名或包名": "Search app name or package",
+        "搜索应用": "Search apps",
+        "当前": "Current",
+        "个目标应用": "target app(s)",
+        "个目标": "target(s)",
+        "目标应用": "target app(s)",
+        "目标": "target(s)",
         "已选择": "Selected",
         "共": "total",
         "项": "item(s)",
@@ -297,6 +304,14 @@
         "天": "d",
         "字节": "B"
     };
+
+    // Whitespace-insensitive index: HTML hints are authored across lines, so their
+    // collapsed text (and the dictionary key) can differ only by spaces.
+    var EN_NORM = {};
+    Object.keys(EN).forEach(function (key) {
+        var norm = key.replace(/\s+/g, "");
+        if (!(norm in EN_NORM)) EN_NORM[norm] = EN[key];
+    });
 
     // Longest first so that a shorter key never wins over a longer sentence.
     var KEYS = Object.keys(EN).sort(function (a, b) { return b.length - a.length; });
@@ -314,9 +329,12 @@
     function translateNode(node) {
         if (translating || lang !== "en" || node.nodeType !== 3 || isSkipped(node)) return;
         var raw = node.nodeValue;
-        var key = raw.trim();
+        // HTML hints often span lines; compare on collapsed whitespace but keep the
+        // node's own leading/trailing whitespace when substituting.
+        var key = raw.replace(/\s+/g, " ").trim();
         if (!key) return;
         var value = EN[key];
+        if (value === undefined) value = EN_NORM[key.replace(/\s+/g, "")];
         if (value === undefined) {
             // Several fragments may share one text node (prefix + reason); apply every
             // match, longest first, until nothing changes.
@@ -337,8 +355,10 @@
         }
         if (value === undefined || value === key) return;
         if (!originals.has(node)) originals.set(node, raw);
+        var start = raw.indexOf(raw.trim());
+        var end = start < 0 ? raw.length : start + raw.trim().length;
         translating = true;
-        node.nodeValue = raw.replace(key, value);
+        node.nodeValue = start < 0 ? value : raw.slice(0, start) + value + raw.slice(end);
         translating = false;
     }
 
@@ -350,7 +370,7 @@
             ["title", "aria-label", "placeholder"].forEach(function (attr) {
                 var value = el.getAttribute(attr);
                 if (!value) return;
-                var key = value.trim();
+                var key = value.replace(/\s+/g, " ").trim();
                 var mapped = EN[key];
                 if (mapped === undefined) return;
                 var store = "data-i18n-" + attr;

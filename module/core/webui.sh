@@ -100,7 +100,6 @@ PATCH_KEYS='ro.build.version.security_patch ro.vendor.build.security_patch ro.sy
 
 # kKeyboxUpdateSources[] (cpp:348-351). "custom" is appended dynamically.
 KBU_URL_YURIKEY='https://raw.githubusercontent.com/Yurii0307/yurikey/main/key'
-KBU_URL_KOWX712='https://raw.githubusercontent.com/KOWX712/Tricky-Addon-Update-Target-List/main/module/common/.default'
 
 # =============================================================================
 # small helpers
@@ -790,7 +789,7 @@ norm_uint() {
 }
 
 load_kbu_conf() {
-    # 6.0.14: auto-update is enabled by default on the KOWX712 channel. A failed
+    # 6.0.14: auto-update is enabled by default on the Yurikey channel. A failed
     # download keeps the current keybox (see kbu_perform_update: tmp + validate +
     # atomic rename, never a direct overwrite).
     KBU_ENABLED=1
@@ -839,7 +838,7 @@ load_kbu_conf() {
         esac
     done < "$KBU_CONF"
     case $KBU_SOURCE in
-        custom|yurikey|kowx712) ;;
+        custom|yurikey) ;;
         *) KBU_SOURCE=yurikey ;;
     esac
     case $KBU_INTERVAL in
@@ -888,7 +887,6 @@ kbu_effective_url() {
         custom)
             if is_safe_http_url "$KBU_CUSTOM_URL"; then printf '%s' "$KBU_CUSTOM_URL"; fi
             ;;
-        kowx712) printf '%s' "$KBU_URL_KOWX712" ;;
         *)       printf '%s' "$KBU_URL_YURIKEY" ;;
     esac
 }
@@ -912,16 +910,15 @@ kbu_status_json() {
     [ -n "$_lr" ] || _lr=never
     case $KBU_SOURCE in
         yurikey) _sname='Yurikey' ;;
-        kowx712) _sname='KOWX712' ;;
         *)       _sname='自定义' ;;
     esac
-    printf '{"enabled":%s,"source":"%s","sourceName":"%s","customUrl":"%s","effectiveUrl":"%s","intervalHours":%s,"lastCheckEpoch":%s,"lastCheckText":"%s","lastResult":"%s","nextEpoch":%s,"nextText":"%s","now":%s,"confPath":"%s","keyboxPath":"%s","sources":[{"id":"yurikey","name":"Yurikey","url":"%s","builtin":true},{"id":"kowx712","name":"KOWX712","url":"%s","builtin":true},{"id":"custom","name":"自定义 URL","url":"","builtin":false}]}\n' \
+    printf '{"enabled":%s,"source":"%s","sourceName":"%s","customUrl":"%s","effectiveUrl":"%s","intervalHours":%s,"lastCheckEpoch":%s,"lastCheckText":"%s","lastResult":"%s","nextEpoch":%s,"nextText":"%s","now":%s,"confPath":"%s","keyboxPath":"%s","sources":[{"id":"yurikey","name":"Yurikey","url":"%s","builtin":true},{"id":"custom","name":"自定义 URL","url":"","builtin":false}]}\n' \
         "$(json_bool "$KBU_ENABLED")" "$(json_escape "$KBU_SOURCE")" \
         "$(json_escape "$_sname")" "$(json_escape "$KBU_CUSTOM_URL")" \
         "$(json_escape "$_url")" "$KBU_INTERVAL" "$KBU_LAST_EPOCH" \
         "$(json_escape "$_lct")" "$(json_escape "$_lr")" "$_next" "$(json_escape "$_nxt")" \
         "$_now" "$KBU_CONF" "$KEYBOX_XML_DST" \
-        "$KBU_URL_YURIKEY" "$KBU_URL_KOWX712"
+        "$KBU_URL_YURIKEY"
 }
 
 # Flat-JSON scalar lookup (same scope as the C++ json_find_value): strings are
@@ -962,7 +959,7 @@ apply_kbu_config_json() {
     if _raw=$(json_raw "$_body" source); then
         _src=$(to_lower "$(trim "$_raw")")
         case $_src in
-            yurikey|kowx712|custom) KBU_SOURCE=$_src ;;
+            yurikey|custom) KBU_SOURCE=$_src ;;
             *) CFG_ERR=unknown_source; return 1 ;;
         esac
     fi

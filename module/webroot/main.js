@@ -1095,8 +1095,8 @@ const ScopeCard = (() => {
     function updateCounts() {
         const filtering = state.filter.trim().length > 0;
         text(UI.scopeCount, filtering
-            ? "已选 " + state.selected + " / 共 " + state.total + " · 筛选 " + state.visible
-            : "已选 " + state.selected + " / 共 " + state.total);
+            ? state.selected + " / 共 " + state.total + " · 筛选 " + state.visible
+            : state.selected + " / 共 " + state.total);
         const busy = state.busy || state.loading || state.readonly;
         UI.scopeSave.disabled = busy || state.selected === 0;
         UI.scopeRestore.disabled = busy;
