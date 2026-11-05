@@ -2,6 +2,13 @@
 
 所有显著变更都会记录在这里。版本号与 Release tag 对应（`vX.Y.Z`）。
 
+## v6.0.33 — 2026-11-05
+
+### 修复
+- 6.0.32 的 `stage_kt.py` 在写入前重新读取 `Keystore2Interceptor.smali`，把刚插入的 `markDeleted` 方法与 `contains` 改动丢掉；H03 调用还在，导致每次 `generateKey` 抛 `NoSuchMethodError: markDeleted`，模块表现为“用一段时间后失效”。
+- 现在只保留一份内存文本、单次写入；删除键回复改用 `v1` 显式传 `KEY_NOT_FOUND(7)`。
+- `stage_kt` 末尾新增构建期断言：存在调用但缺方法时直接让 dex 构建失败。
+
 ## v6.0.32 — 2026-11-05
 
 ### 功耗

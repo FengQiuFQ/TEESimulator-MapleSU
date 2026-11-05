@@ -4,21 +4,16 @@ make_p16 rebuilds smali_tree from smali_base on every run, so these changes cann
 made by hand: they are applied here, after all built-in stages, every build.
 
   * G02: durable exhaustion tombstone (`markDeleted` + non-consuming lookup);
+  * G02b: explicit KEY_NOT_FOUND(7) instead of the reused v6 register;
   * H03: alias reads as absent while doSoftwareKeyGen runs;
   * experimental key takeover for target uids (mpl.KeyTakeover).
+
+The guard at the end fails the build if a call site exists without its method, which is
+how an earlier dex shipped `NoSuchMethodError: markDeleted`.
 """
 import os
 
-
-def _read(path):
-    with open(path, encoding="utf-8") as handle:
-        return handle.read()
-
-
-def _write(path, text):
-    with open(path, "w", encoding="utf-8", newline="\n") as handle:
-        handle.write(text)
-
+NL = "\n"
 
 MARKER = """.method public static markDeleted(Lorg/matrix/TEESimulator/interception/keystore/KeyIdentifier;)V
     .registers 2
@@ -98,6 +93,22 @@ NEW_110 = """    :cond_110
     :cond_110_forward
     sget-object v0, Lx4/b;->a:Ljava/util/concurrent/atomic/AtomicLong;"""
 
+STALE_REPLY = ("    invoke-virtual {v0, v6}, Lorg/matrix/TEESimulator/interception/keystore/"
+               "InterceptorUtils;->createErrorReply(I)Lv4/d;")
+FIXED_REPLY = ("    const/4 v1, 0x7" + NL + NL +
+               "    invoke-virtual {v0, v1}, Lorg/matrix/TEESimulator/interception/keystore/"
+               "InterceptorUtils;->createErrorReply(I)Lv4/d;")
+
+
+def _read(path):
+    with open(path, encoding="utf-8") as handle:
+        return handle.read()
+
+
+def _write(path, text):
+    with open(path, "w", encoding="utf-8", newline=NL) as handle:
+        handle.write(text)
+
 
 def apply(tree, log=None):
     k2 = os.path.join(tree, "org", "matrix", "TEESimulator", "interception",
@@ -105,6 +116,7 @@ def apply(tree, log=None):
     shim = os.path.join(tree, "org", "matrix", "TEESimulator", "interception",
                         "keystore", "shim", "KeyMintSecurityLevelInterceptor.smali")
 
+    # Keystore2Interceptor: tombstone method + non-consuming lookup + reply code.
     text = _read(k2)
     if "markDeleted(" not in text:
         if text.count(".method public final forgetDeletedKey(") != 1:
@@ -112,23 +124,15 @@ def apply(tree, log=None):
         text = text.replace(".method public final forgetDeletedKey(", MARKER, 1)
     if OLD_REMOVE in text:
         text = text.replace(OLD_REMOVE, NEW_CONTAINS, 1)
-
-    # G02b: the deleted-key reply used v6, which the surrounding code reuses for a uid
-    # and other values; send an explicit KEY_NOT_FOUND (7) instead of a stale register.
-    text = _read(k2)
-    log_marker = "Returning KEY_NOT_FOUND for deleted key"
-    stale = "    invoke-virtual {v0, v6}, Lorg/matrix/TEESimulator/interception/keystore/InterceptorUtils;->createErrorReply(I)Lv4/d;"
-    fixed = ("    const/4 v1, 0x7\n\n"
-             "    invoke-virtual {v0, v1}, Lorg/matrix/TEESimulator/interception/keystore/InterceptorUtils;->createErrorReply(I)Lv4/d;")
-    pos = text.find(log_marker)
+    pos = text.find("Returning KEY_NOT_FOUND for deleted key")
     if pos != -1:
-        hit = text.find(stale, pos)
+        hit = text.find(STALE_REPLY, pos)
         if hit != -1:
-            text = text[:hit] + fixed + text[hit + len(stale):]
-            _write(k2, text)
-
+            text = text[:hit] + FIXED_REPLY + text[hit + len(STALE_REPLY):]
     _write(k2, text)
 
+    # KeyMintSecurityLevelInterceptor: mark on exhaustion, mark during generation,
+    # and the optional takeover branch.
     text = _read(shim)
     if "markDeleted(Lorg/matrix/TEESimulator/interception/keystore/KeyIdentifier;)V\n\n    sget-object p0" not in text:
         if OLD_EXH not in text:
@@ -143,6 +147,16 @@ def apply(tree, log=None):
             raise SystemExit("stage_kt: takeover anchor")
         text = text.replace(OLD_110, NEW_110, 1)
     _write(shim, text)
+
+    # Fail the build rather than ship calls without their target.
+    k2_text = _read(k2)
+    shim_text = _read(shim)
+    if "markDeleted(Lorg/matrix/TEESimulator/interception/keystore/KeyIdentifier;)V" not in k2_text:
+        raise SystemExit("stage_kt: markDeleted definition missing from Keystore2Interceptor")
+    if "Set;->contains(Ljava/lang/Object;)Z" not in k2_text:
+        raise SystemExit("stage_kt: tombstone lookup is not non-consuming")
+    if "Lmpl/KeyTakeover;" not in shim_text or "H03): the alias reads as absent" not in shim_text:
+        raise SystemExit("stage_kt: shim edits missing")
 
     if log is not None:
         log("kt   : G02 tombstone + H03 window + key takeover")
