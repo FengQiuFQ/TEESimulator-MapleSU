@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Package the TEESimulator-RS core as MapleSU's bundled KSU module ZIP.
+"""Package the TEESimulator-RS core as a standalone KSU module ZIP.
 
 Upstream (read-only): `.research/SKRoot/Pro(众测开放中)/src/testModule/
 module_TEESimulatorRS/resources/TEESimulatorRS_Core/`. The kernel-side binaries
@@ -77,8 +77,8 @@ a package without the SOTER lane (2026-11-02 audit). The build verifies the
 required classes and prints the dex digest + class hits in its provenance
 output.
 
-The output is deterministic (fixed timestamps/order) so its SHA-256 can be
-pinned in `LiteScriptModuleBackend` and verified before installation.
+The output is deterministic (fixed timestamps/order) for independent distribution.
+The manager does not bundle or preinstall this module.
 """
 import hashlib
 import os
@@ -90,8 +90,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UPSTREAM = os.path.join(
     ROOT, ".research", "SKRoot", "Pro(众测开放中)", "src", "testModule",
     "module_TEESimulatorRS", "resources", "TEESimulatorRS_Core")
-OUT = os.path.join(ROOT, "manager", "src", "main", "assets", "maplesu", "bundled",
-                   "teesimulator-rs.zip")
+OUT = os.path.join(ROOT, "out", "modules", "teesimulator-rs.zip")
 
 # The KSU/Lite WebUI is served by the manager from `webroot/` (iframe + window.ksu
 # bridge), so the same front-end the Pro build serves over HTTP ships here too.
@@ -142,15 +141,15 @@ PRO_KEYBOX_SHA256 = "b7629b3d348c7386b397966111c0ef3b3d9fa9eef4e2d715a64fef6740b
 
 MODULE_PROP = """id=tricky_store
 name=TEESimulator-RS_MapleSU
-version=6.0.36_MapleSU
-versionCode=63600
+version=6.0.37_MapleSU
+versionCode=63700
 author=TEESimulator-RS / MapleSU
-description=频道：@MapleAutumn MapleSU_Normal定制版.Hardware-backed key attestation simulator, bundled and default-installed by MapleSU. By.MapleAutumn Customized Fixed Soter. 解决TEESimulator-RS目前已知所有检测点与Soter.
+description=频道：@MapleAutumn MapleSU_Normal定制版.Hardware-backed key attestation simulator, available for manual installation in MapleSU. By.MapleAutumn Customized Fixed Soter. 解决TEESimulator-RS目前已知所有检测点与Soter.
 updateJson=https://raw.githubusercontent.com/FengQiuFQ/TEESimulator-MapleSU/main/update.json
 """
 
 CUSTOMIZE = r"""#!/system/bin/sh
-# MapleSU packaging for the bundled TEESimulator-RS module (KSU/Lite).
+# MapleSU packaging for the standalone TEESimulator-RS module (KSU/Lite).
 #
 # Upstream parity (TEESimulator-RS v6.0.1 customize.sh): SKIPUNZIP=1, so the
 # KernelSU/Magisk installer does not auto-extract the archive; this script
