@@ -32,6 +32,24 @@ su -c 'pid=$(pidof keystore2); grep -c libTEESimulator /proc/$pid/maps'
 
 期望：`core=ok`、`daemon=<pid>`、`inject=ok`、`keystore2` 的 maps 计数 ≥ 1。
 
+## 兼容性检查
+
+安装时会自动检查一次环境，结果打印在安装日志里，只提示，不会阻止安装。判断方式：
+
+- **不针对某个模块：** 每个启用的模块都按它实际做的事判断，包括替换了哪些系统文件、通过 `system.prop` 或脚本改了哪些属性，以及往 keystore2 里加载了什么。
+- **设备自带的值不算改动：** 会和所有分区的属性文件、内核启动参数、init 脚本比较，值相同就不提示。
+- **优先看症状：** keystore2 日志里取不到远程证书会直接提示，不管原因是什么。
+
+此外还会检查 KeyBox 到期时间和远程证书服务的连通性。
+
+开机后可以在终端再查一次，这次还会包含模块进程、keystore2 注入和 Soter 状态：
+
+```bash
+su -c 'sh /data/adb/modules/tricky_store/core/compat.sh --text'
+```
+
+最近一次结果保存在 `/data/adb/tricky_store/compat_report.json`，WebUI 导出的诊断日志里也有一份。
+
 ## 升级
 
 直接覆盖安装即可：

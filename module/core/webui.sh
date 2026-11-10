@@ -1458,6 +1458,7 @@ cmd_logs() {
         getprop ro.product.model; getprop ro.build.version.release
         getprop ro.build.version.sdk; getprop ro.product.cpu.abi
         printf '\n[ksu_status]\n'; cat "$CONFIG_DIR/ksu_status" 2>/dev/null
+        printf '\n[compat]\n'; sh "$SCRIPT_DIR/compat.sh" --json 2>/dev/null
         printf '\n[soter_route]\n'; cat "$CONFIG_DIR/soter_route" 2>/dev/null
         printf '\n[key_takeover]\n'; get_key_takeover
         printf '\n[keybox live]\n'
@@ -1631,6 +1632,16 @@ set_key_takeover() {
     printf 'OK\n'
 }
 
+# Compatibility report as one JSON line; the same script runs during install.
+cmd_compat() {
+    _s=$SCRIPT_DIR/compat.sh
+    if [ ! -f "$_s" ]; then
+        err_json 'unsupported:compat'
+        return
+    fi
+    sh "$_s" --json 2>/dev/null || err_json 'compat_failed'
+}
+
 cmd_info() {
     _ver=$(module_version)
     _vcode=$(module_version_code)
@@ -1645,7 +1656,7 @@ cmd_info() {
         _kb_short=unknown
     fi
     _soter=$(get_soter)
-    printf '{"module":"TEESimulator-RS","version":"%s","author":"%s","dex_sha256":"%s","dex_short":"%s","keybox_short":"%s","keybox_current":"%s","keybox_active":"%s","soter_forge":%s,"build":"%s","mode":"ksu","backend":"ksu","features":["info","get soter","set soter","get soter_certs","set soter_certs","get hide_bootloader","set hide_bootloader","get auto_third_app","set auto_third_app","get patch","set patch","keyboxes","keybox_set","keybox_reload","kbu_status","kbu_config","kbu_now","scope list","scope set","scope setall","targets","get debug","set debug","logs","target-watch","kbu-tick","soter-warm","get key_takeover","set key_takeover"],"unsupported":["get fix_tee","set fix_tee"],"features_note":"target.txt accepts both prefix (!pkg/?pkg, dex) and suffix (pkg!/pkg?, upstream) markers"}\n' \
+    printf '{"module":"TEESimulator-RS","version":"%s","author":"%s","dex_sha256":"%s","dex_short":"%s","keybox_short":"%s","keybox_current":"%s","keybox_active":"%s","soter_forge":%s,"build":"%s","mode":"ksu","backend":"ksu","features":["info","get soter","set soter","get soter_certs","set soter_certs","get hide_bootloader","set hide_bootloader","get auto_third_app","set auto_third_app","get patch","set patch","keyboxes","keybox_set","keybox_reload","kbu_status","kbu_config","kbu_now","scope list","scope set","scope setall","targets","get debug","set debug","logs","compat","target-watch","kbu-tick","soter-warm","get key_takeover","set key_takeover"],"unsupported":["get fix_tee","set fix_tee"],"features_note":"target.txt accepts both prefix (!pkg/?pkg, dex) and suffix (pkg!/pkg?, upstream) markers"}\n' \
         "$(json_escape "$_ver")" "$(json_escape "$MOD_AUTHOR")" \
         "$_dex_sha" "$_dex_short" "$_kb_short" \
         "$(json_escape "$_cur")" "$(json_escape "$_act")" \
@@ -1728,6 +1739,9 @@ case $CMD in
         ;;
     logs)
         cmd_logs
+        ;;
+    compat)
+        cmd_compat
         ;;
     targets)
         cmd_targets

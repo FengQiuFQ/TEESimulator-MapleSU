@@ -207,7 +207,7 @@ See [docs/BUILD.md](docs/BUILD.md).
 |---|---|
 | `dex/` | smali patch tree and Java sources (`mpl/*`): transaction handling and certificate generation |
 | `native/` | `libTEESimulator.so`: binder hooks and the Soter socket channel |
-| `module/` | `service.sh`, `core/webui.sh`, `webroot/`, `sepolicy.rule` |
+| `module/` | `service.sh`, `core/webui.sh`, `core/compat.sh`, `webroot/`, `sepolicy.rule` |
 | `tools/` | packaging, verification and diagnostic scripts |
 | `docs/` | installation, build, configuration, architecture, FAQ |
 | `scripts/` | build entry point |

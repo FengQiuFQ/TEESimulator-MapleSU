@@ -46,6 +46,9 @@ jobs:
             echo "node not installed, skipping"
           fi
 
+      - name: Compatibility check tests
+        run: bash tools/test_compat.sh
+
   package:
     name: Package module
     needs: validate

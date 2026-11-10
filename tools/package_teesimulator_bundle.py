@@ -92,26 +92,36 @@ UPSTREAM = os.path.join(
     "module_TEESimulatorRS", "resources", "TEESimulatorRS_Core")
 OUT = os.path.join(ROOT, "out", "modules", "teesimulator-rs.zip")
 
+# Project-owned sources. This repository keeps them under module/; a working tree that
+# still has the older work/tee13 layout keeps building from it.
+LEGACY_RESOURCES = os.path.join(ROOT, "work", "tee13", "src", "testModule",
+                                "module_TEESimulatorRS", "resources")
+
+
+def _source(legacy_name, *repo_path):
+    legacy = os.path.join(LEGACY_RESOURCES, legacy_name)
+    return legacy if os.path.exists(legacy) else os.path.join(ROOT, *repo_path)
+
+
 # The KSU/Lite WebUI is served by the manager from `webroot/` (iframe + window.ksu
 # bridge), so the same front-end the Pro build serves over HTTP ships here too.
-WEBROOT = os.path.join(ROOT, "work", "tee13", "src", "testModule",
-                       "module_TEESimulatorRS", "resources", "webroot")
+WEBROOT = _source("webroot", "module", "webroot")
 WEBROOT_FILES = ["index.html", "main.js", "request.js", "i18n.js", "style.css", "toast.css", "toast.js"]
 
 # KSU/Lite WebUI backend (shipped as core/webui.sh, mode 0755). The front end calls
 # `sh $MODDIR/core/webui.sh <cmd>` through window.ksu.exec, so the path is a
 # contract with the packaged webroot/main.js and is kept even though the runtime
 # itself is flat.
-WEBUI_SH = os.path.join(ROOT, "work", "tee13", "src", "testModule",
-                        "module_TEESimulatorRS", "resources", "webui.sh")
+WEBUI_SH = _source("webui.sh", "module", "core", "webui.sh")
+
+# Compatibility check: customize.sh runs it during install, webui.sh runs it on demand.
+COMPAT_SH = _source("compat.sh", "module", "core", "compat.sh")
 
 # hide_bootloader.sh is a module-root asset: the module .so runs it from there
 # (module_TEESimulatorRS.cpp:116). 6.0.10 ships the exact file the Pro package
 # carries instead of the older SKRoot checkout copy: it locates `resetprop`
 # absolutely and reports per-property failures instead of failing silently.
-HIDE_BOOTLOADER = os.path.join(
-    ROOT, "work", "tee13", "src", "testModule", "module_TEESimulatorRS",
-    "resources", "hide_bootloader.sh")
+HIDE_BOOTLOADER = _source("hide_bootloader.sh", "module", "hide_bootloader.sh")
 
 # The package must ship the rebuilt dex. The upstream checkout's classes.dex has
 # neither the SOTER lane nor the WebUI scope backend, so a silent fallback produced
@@ -120,8 +130,7 @@ DEX_REQUIRED_CLASSES = ("mpl/SoterForge", "mpl/ScopeCli")
 
 # KernelSU applies <module>/sepolicy.rule at boot; a rule inside core/ is never
 # read. This is the project-owned policy (include the su/keystore ptrace grants).
-POLICY_SRC = os.path.join(ROOT, "work", "tee13", "src", "testModule",
-                          "module_TEESimulatorRS", "resources", "sepolicy.rule")
+POLICY_SRC = _source("sepolicy.rule", "module", "sepolicy.rule")
 
 # Flat runtime: everything the dex, the daemon and the injector open by name.
 # `sepolicy.rule` is added separately (module root), `core/webui.sh` + `webroot/`
@@ -200,7 +209,7 @@ install_file() {
 ui_print "- Extracting module files"
 for f in module.prop service.sh uninstall.sh sepolicy.rule hide_bootloader.sh \
          classes.dex daemon inject supervisor libTEESimulator.so libcertgen.so \
-         resetprop keybox.xml target.txt core/webui.sh \
+         resetprop keybox.xml target.txt core/webui.sh core/compat.sh \
          webroot/index.html webroot/main.js webroot/request.js webroot/i18n.js \
          webroot/style.css webroot/toast.css webroot/toast.js ; do
   install_file "$f"
@@ -211,7 +220,7 @@ done
 # call that a device refuses must not abort the install.)
 set_perm_recursive "$MODPATH" 0 0 0755 0644 2>/dev/null || true
 for f in service.sh uninstall.sh hide_bootloader.sh daemon inject supervisor \
-         resetprop core/webui.sh ; do
+         resetprop core/webui.sh core/compat.sh ; do
   chown 0:0 "$MODPATH/$f" 2>/dev/null || true
   chmod 0755 "$MODPATH/$f" 2>/dev/null || true
 done
@@ -259,6 +268,15 @@ for _old in teesimulator-rs trick_store; do
   if [ -d "/data/adb/modules/$_old" ]; then
     ui_print "- 检测到旧模块目录 $_old，开机时将自动迁移（配置保留）"
   fi
+done
+
+# Report only: nothing here can stop or stall the install. The result is also kept
+# in $CONFIG_DIR/compat_report.json.
+ui_print "- Compatibility check"
+_compat_limit=
+command -v timeout >/dev/null 2>&1 && _compat_limit="timeout 20"
+$_compat_limit sh "$MODPATH/core/compat.sh" --install 2>/dev/null | while IFS= read -r _line; do
+  ui_print "$_line"
 done
 
 ui_print "『时光流转，愿你能与珍爱之人再度重逢』"
@@ -1187,6 +1205,8 @@ def build_webui(source_bytes):
     """Return the packaged webui.sh with the flat-layout CORE fallback."""
     if b"\r\n" in source_bytes:
         sys.exit("webui.sh must use LF line endings (found CRLF)")
+    if WEBUI_CORE_PATCHED in source_bytes:
+        return source_bytes
     if source_bytes.count(WEBUI_CORE_ORIGINAL) != 1:
         sys.exit("webui.sh: expected exactly one %r line, found %d"
                  % (WEBUI_CORE_ORIGINAL.decode().strip(),
@@ -1286,6 +1306,10 @@ def main():
         sys.exit("webui.sh is missing: %s" % WEBUI_SH)
     with open(WEBUI_SH, "rb") as handle:
         webui_data = build_webui(handle.read())
+    if not os.path.isfile(COMPAT_SH):
+        sys.exit("compat.sh is missing: %s" % COMPAT_SH)
+    with open(COMPAT_SH, "rb") as handle:
+        compat_data = handle.read()
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     dex_path, dex_data = read_dex()
     hide_data = read_hide_bootloader()
@@ -1296,6 +1320,7 @@ def main():
         "uninstall.sh": UNINSTALL.encode(),
         "hide_bootloader.sh": hide_data,
         "core/webui.sh": webui_data,
+        "core/compat.sh": compat_data,
     }
     for name, data in scripts.items():
         assert_policy_safe(name, data)
@@ -1347,6 +1372,8 @@ def main():
             archived[name] = hashlib.sha256(data).hexdigest()
         add(zf, "core/webui.sh", webui_data, 0o755)
         archived["core/webui.sh"] = hashlib.sha256(webui_data).hexdigest()
+        add(zf, "core/compat.sh", compat_data, 0o755)
+        archived["core/compat.sh"] = hashlib.sha256(compat_data).hexdigest()
         for name in WEBROOT_FILES:
             with open(os.path.join(WEBROOT, name), "rb") as handle:
                 data = handle.read()
@@ -1362,6 +1389,7 @@ def main():
     print("  asset hide_bootloader.sh sha256=%s"
           % hashlib.sha256(hide_data).hexdigest())
     print("  asset core/webui.sh sha256=%s" % archived["core/webui.sh"])
+    print("  asset core/compat.sh sha256=%s" % archived["core/compat.sh"])
     for name in WEBROOT_FILES:
         print("  asset webroot/%s sha256=%s" % (name, archived["webroot/" + name]))
     print("  asset classes.dex sha256=%s" % hashlib.sha256(dex_data).hexdigest())

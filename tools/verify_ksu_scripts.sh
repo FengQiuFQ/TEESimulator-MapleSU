@@ -5,10 +5,10 @@
 # What it does (no root, no device, no installation):
 #   1. extracts manager/src/main/assets/maplesu/bundled/teesimulator-rs.zip to a
 #      temp dir and runs `sh -n` on service.sh / customize.sh / uninstall.sh /
-#      hide_bootloader.sh / core/webui.sh;
+#      hide_bootloader.sh / core/webui.sh / core/compat.sh;
 #   2. builds a fake MODDIR (fake core/ + fake classes.dex + real webui.sh) and
 #      runs the read-only webui.sh commands (info / keyboxes / get soter /
-#      get patch / get soter_certs / targets); each must print exactly one line,
+#      get patch / get soter_certs / targets / compat); each must print exactly one line,
 #      that line must be valid JSON and the exit code must be 0;
 #   3. points WEBUI_KSU_CONFIG_DIR at a path that cannot be created/written and
 #      runs the write commands; each must print {"ok":false,...} (rc 0), never a
@@ -190,18 +190,18 @@ if [ "$extract_ok" != 1 ]; then
 fi
 
 missing=()
-for f in service.sh customize.sh uninstall.sh hide_bootloader.sh core/webui.sh; do
+for f in service.sh customize.sh uninstall.sh hide_bootloader.sh core/webui.sh core/compat.sh; do
     [ -f "$PKG/$f" ] || missing+=("$f")
 done
 if [ ${#missing[@]} -eq 0 ]; then
-    pass B-01 "extracted package contains the 5 scripts"
+    pass B-01 "extracted package contains the 6 scripts"
 else
     fail B-01 "extracted package is missing scripts" "${missing[@]}"
 fi
 
-# --- B-02..B-06: sh -n -------------------------------------------------------
-syn_ids=(B-02 B-03 B-04 B-05 B-06)
-syn_files=(service.sh customize.sh uninstall.sh hide_bootloader.sh core/webui.sh)
+# --- B-02..B-06, B-18: sh -n -------------------------------------------------
+syn_ids=(B-02 B-03 B-04 B-05 B-06 B-18)
+syn_files=(service.sh customize.sh uninstall.sh hide_bootloader.sh core/webui.sh core/compat.sh)
 for i in "${!syn_files[@]}"; do
     f=${syn_files[$i]}
     id=${syn_ids[$i]}
@@ -224,6 +224,7 @@ mkdir -p "$FAKE/core" "$CFG" || {
     exit 2
 }
 cp "$PKG/core/webui.sh" "$FAKE/core/webui.sh"
+cp "$PKG/core/compat.sh" "$FAKE/core/compat.sh" 2>/dev/null || :
 cp "$PKG/module.prop" "$FAKE/module.prop" 2>/dev/null || : > "$FAKE/module.prop"
 # 6.0.10 moved the runtime to the module root (upstream flat layout); older
 # packages kept it under core/. Mirror whichever layout the package uses, so
@@ -256,7 +257,7 @@ print_verbose() {
     printf '%s\n' "$1" | indent
 }
 
-# --- B-07..B-12: read-only commands -----------------------------------------
+# --- B-07..B-12, B-19: read-only commands ------------------------------------
 read_cmds=(
     "B-07|info"
     "B-08|keyboxes"
@@ -264,6 +265,7 @@ read_cmds=(
     "B-10|get patch"
     "B-11|get soter_certs"
     "B-12|targets"
+    "B-19|compat"
 )
 for spec in "${read_cmds[@]}"; do
     id=${spec%%|*}

@@ -7,7 +7,7 @@
 | 注入库 | `native/`（`libTEESimulator.so`） | 在 keystore2 / saterserver 内 hook binder，事务重定向与回填 |
 | 守护进程 | `dex/`（`org.matrix.TEESimulator.App`） | 配置、证书生成、Soter forge、socket 服务端 |
 | 原生证书生成 | `libcertgen.so`（Rust） | 按 keybox 签发证书链，支持 attestation 扩展 |
-| 模块脚本 | `module/service.sh`、`core/webui.sh` | 开机启动、状态记录、WebUI 后端 |
+| 模块脚本 | `module/service.sh`、`core/webui.sh`、`core/compat.sh` | 开机启动、状态记录、WebUI 后端、兼容性检查 |
 | WebUI | `module/webroot/` | 双后端（HTTP / `ksu.exec`） |
 
 ## keystore 路径（Android 12+）
