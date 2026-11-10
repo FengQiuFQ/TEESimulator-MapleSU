@@ -106,7 +106,7 @@ def _source(legacy_name, *repo_path):
 # The KSU/Lite WebUI is served by the manager from `webroot/` (iframe + window.ksu
 # bridge), so the same front-end the Pro build serves over HTTP ships here too.
 WEBROOT = _source("webroot", "module", "webroot")
-WEBROOT_FILES = ["index.html", "main.js", "request.js", "i18n.js", "style.css", "toast.css", "toast.js"]
+WEBROOT_FILES = ["index.html", "main.js", "request.js", "i18n.js", "locales.js", "style.css"]
 
 # KSU/Lite WebUI backend (shipped as core/webui.sh, mode 0755). The front end calls
 # `sh $MODDIR/core/webui.sh <cmd>` through window.ksu.exec, so the path is a
@@ -211,7 +211,7 @@ for f in module.prop service.sh uninstall.sh sepolicy.rule hide_bootloader.sh \
          classes.dex daemon inject supervisor libTEESimulator.so libcertgen.so \
          resetprop keybox.xml target.txt core/webui.sh core/compat.sh \
          webroot/index.html webroot/main.js webroot/request.js webroot/i18n.js \
-         webroot/style.css webroot/toast.css webroot/toast.js ; do
+         webroot/locales.js webroot/style.css ; do
   install_file "$f"
 done
 

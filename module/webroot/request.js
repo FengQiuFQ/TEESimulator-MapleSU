@@ -1,47 +1,31 @@
 /* ==========================================================================
-   MapleSU TEE 模拟器 · 模块 WebUI 统一后端层
-   --------------------------------------------------------------------------
-   同一个前端跑在两种运行形态上：
-     Ultra（Pro 原生模块）：WebUI 由 module .so 的 HTTP 服务提供 → POST fetch。
-     KSU/Lite（脚本模块） ：管理器把 webroot 装进 iframe 并注入 window.ksu，
-                            这里用 ksu.exec 跑 `sh $MODDIR/core/webui.sh <cmd…>`。
-   两条分支返回同一组 JSON / 文本，main.js 的调用点不区分当前模式。
+   MapleSU TEE WebUI: backend layer. No user-facing text lives here: errors carry a
+   code and a technical detail, and main.js turns them into words through i18n.
 
-   KSU 侧契约（core/webui.sh）：
-     · 输出单行文本或单行 JSON；失败一律是 {"ok":false,"error":"…"}；
-     · 写操作必须回 OK 或 {"ok":true}，否则按失败处理（不静默假装成功）；
-     · 明确不支持时返回 {"ok":false,"error":"unsupported:<cmd>"}。
-   Ultra 侧端点与返回类型保持不变（与改动前逐字一致）。
+   The same front end runs on two backends:
+     Ultra (native module): the module .so serves the WebUI over HTTP, so POST fetch.
+     KSU/Lite (script module): the manager loads webroot and injects window.ksu, so
+       this runs `sh $MODDIR/core/webui.sh <cmd...>` through ksu.exec.
+   Both return the same JSON or text, and main.js does not care which one it talks to.
+
+   core/webui.sh contract:
+     - prints one line of text or JSON; every failure is {"ok":false,"error":"..."};
+     - a write must answer OK or {"ok":true}, anything else counts as a failure;
+     - an unsupported command answers {"ok":false,"error":"unsupported:<cmd>"}.
    ========================================================================== */
 
-/* ------------------------------- 错误约定 ------------------------------- */
+/* ------------------------------ error shape ------------------------------- */
 
-const BACKEND_CODES = {
-    ksu_missing: "KSU 桥不可用（window.ksu 未注入）",
-    no_moddir: "未找到模块目录",
-    no_webui: "webui.sh 不存在",
-    no_cli: "未找到 ScopeCli",
-    timeout: "命令超时",
-    exec: "命令执行失败",
-    no_ack: "后端未返回确认",
-    unsupported: "功能不可用",
-    backend: "后端返回错误",
-    empty: "后端没有输出",
-    bad_json: "响应不是合法 JSON",
-    http: "HTTP 请求失败",
-    unknown: "未知错误",
-};
+const BACKEND_CODES = ["ksu_missing", "no_moddir", "no_webui", "no_cli", "timeout", "exec", "no_ack",
+    "unsupported", "backend", "empty", "bad_json", "http", "no_selection", "unknown"];
 
-/* 统一异常：err.code 给程序判断，err.reason 给用户看（中文，含具体原因）。 */
 function backendError(code, detail) {
-    const key = Object.prototype.hasOwnProperty.call(BACKEND_CODES, code) ? code : "unknown";
-    const base = BACKEND_CODES[key];
-    const reason = detail ? base + "（" + detail + "）" : base;
-    const err = new Error(reason);
+    const key = BACKEND_CODES.indexOf(code) >= 0 ? code : "unknown";
+    const text = detail === undefined || detail === null ? "" : String(detail);
+    const err = new Error(text ? key + ": " + text : key);
     err.name = "BackendError";
     err.code = key;
-    err.reason = reason;
-    err.detail = detail === undefined || detail === null ? "" : String(detail);
+    err.detail = text;
     return err;
 }
 
@@ -49,31 +33,27 @@ function isBackendError(err) {
     return !!(err && err.name === "BackendError" && err.code);
 }
 
-/* 把任意异常收敛成带 code 的 BackendError，上层只处理一种错误形态。 */
 function asBackendError(err, fallbackCode) {
     if (isBackendError(err)) return err;
     const message = err && err.message ? String(err.message) : String(err);
-    if (fallbackCode) return backendError(fallbackCode, message);
-    /* 业务侧直接 throw new Error("…") 的情况：原样当原因，不套“未知错误（…）” */
-    const wrapped = backendError("unknown", message);
-    wrapped.reason = message;
-    wrapped.detail = message;
-    return wrapped;
+    return backendError(fallbackCode || "unknown", message);
 }
 
-/* ------------------------------- KSU 执行桥 ------------------------------ */
-/* 从「Soter 接管范围」既有实现原样提取：回调式 / 同步返回值 / Promise 三种
-   ksu.exec 形态都兼容，回调等不到时（默认 8s）退同步写法。
-   回调签名 window[cb](errno, stdout, stderr)（见 modbridge.js）。 */
+/* ------------------------------ ksu.exec bridge --------------------------- */
+/* Handles the callback, synchronous and Promise forms of ksu.exec. The callback is
+   window[name](errno, stdout, stderr). */
 const KsuExec = (() => {
     const CALLBACK_TIMEOUT_MS = 8000;
     let seq = 0;
+    /* null until the bridge shows which form works: true once any callback arrived,
+       false once only the synchronous form answered. */
+    let callbacks = null;
 
     function available() {
         return !!(window.ksu && typeof window.ksu.exec === "function");
     }
 
-    /* 单引号包裹 + 内部单引号转义；进入命令的所有值都先过这一层 */
+    /* Every value that enters a command goes through this. */
     function shellQuote(value) {
         return "'" + String(value).replace(/'/g, "'\\''") + "'";
     }
@@ -81,6 +61,15 @@ const KsuExec = (() => {
     function execText(cmd, options) {
         const timeoutMs = Math.max(1000, Number(options && options.timeout) || CALLBACK_TIMEOUT_MS);
         return new Promise((resolve, reject) => {
+            if (callbacks === false) {
+                try {
+                    const out = window.ksu.exec(cmd);
+                    resolve(String(out === undefined || out === null ? "" : out));
+                } catch (e) {
+                    reject(backendError("exec", (e && e.message) || String(e)));
+                }
+                return;
+            }
             const name = "__mplKsuCb" + (++seq);
             let settled = false;
             let timer = 0;
@@ -93,12 +82,13 @@ const KsuExec = (() => {
                 else resolve(String(stdout === undefined || stdout === null ? "" : stdout));
             };
             window[name] = (errno, stdout, stderr) => {
+                callbacks = true;
                 const code = Number(errno) || 0;
                 const output = String(stdout === undefined || stdout === null ? "" : stdout);
                 if (code !== 0 && !output.trim()) {
-                    /* 完全没输出 + 非 0：把 stderr（Java 栈/权限提示）带给用户 */
+                    /* Nothing on stdout and a failure status: stderr is all there is. */
                     finish(backendError("exec", "errno=" + code +
-                        (stderr ? "：" + String(stderr).slice(0, 200) : "")));
+                        (stderr ? ": " + String(stderr).slice(0, 200) : "")));
                     return;
                 }
                 if (code !== 0 && stderr) {
@@ -114,26 +104,34 @@ const KsuExec = (() => {
                 return;
             }
             if (ret && typeof ret.then === "function") {
-                /* 少数管理器把 exec 做成 Promise */
                 ret.then((value) => finish(null, value), (e) => finish(e));
                 return;
             }
             if (typeof ret === "string" && ret.length) {
-                /* 同步实现忽略了多余参数，已经拿到 stdout */
+                /* A synchronous bridge that ignored the extra arguments. */
                 finish(null, ret);
                 return;
             }
             timer = setTimeout(() => {
-                /* 回调没来：退同步写法（会阻塞界面线程，但管理器都支持） */
+                /* On a bridge known to call back, this command is just slow. Running it
+                   again would repeat a write and freeze the page for as long as it takes,
+                   so it stays a timeout. */
+                if (callbacks === true) {
+                    finish(backendError("timeout", timeoutMs + " ms"));
+                    return;
+                }
+                /* No callback has ever arrived. The first command is always the read-only
+                   module probe, so it is safe to retry it synchronously and find out. */
                 try {
                     const out = window.ksu.exec(cmd);
                     if (typeof out === "string" && out.length) {
+                        callbacks = false;
                         finish(null, out);
                         return;
                     }
-                    finish(backendError("timeout", timeoutMs + "ms 内没有回调，同步调用也没有返回"));
+                    finish(backendError("timeout", timeoutMs + " ms, no callback, empty synchronous result"));
                 } catch (e) {
-                    finish(backendError("timeout", timeoutMs + "ms 内没有回调"));
+                    finish(backendError("timeout", timeoutMs + " ms, no callback"));
                 }
             }, timeoutMs);
         });
@@ -142,13 +140,10 @@ const KsuExec = (() => {
     return { available, shellQuote, execText };
 })();
 
-/* ------------------------------ 模块根 $MODDIR ----------------------------- */
-/* 探测策略沿用「Soter 接管范围」的既有实现（同一份脚本、同一套降级）：
-   1) /data/adb/modules/teesimulator-rs（约定路径）
-   2) 扫 /data/adb/modules/<name>/core/classes.dex，取含 mpl/ScopeCli 的那个
-   3) 再退一步 /data/adb/modules/<name>/TEESimulatorRS_Core/classes.dex（Ultra 布局）
-   本层只多看一个 <dir>/core/webui.sh —— KSU 的脚本后端就放在那里。
-   结果同时给出 webui 与 dex 两个命中，供 webui.sh 与 ScopeCli 各自使用。 */
+/* ------------------------------ module root ------------------------------- */
+/* Finds the module directory: the known ids first, then every module whose dex holds
+   mpl/ScopeCli. Reports both the webui.sh hit and the dex hit, for webui.sh and
+   ScopeCli respectively. */
 const ModuleRoot = (() => {
     /* 6.0.18: flat layout first (classes.dex at the module root), then the old
        core/ layout, then the Ultra layout. The hint list covers both ids we
@@ -156,14 +151,14 @@ const ModuleRoot = (() => {
     const MODULE_ROOT_HINTS = ["/data/adb/modules/tricky_store", "/data/adb/modules/trick_store", "/data/adb/modules/teesimulator-rs"];
     const DEX_RELS = ["classes.dex", "core/classes.dex", "TEESimulatorRS_Core/classes.dex"];
     const WEBUI_REL = "core/webui.sh";
-    /* dex 字符串表里是类型描述符 Lmpl/ScopeCli;，grep dex 必须用斜杠形式；
-       传给 app_process 的类名用点号形式（ScopeCli.CLI_CLASS）。 */
+    /* The dex string table holds the type descriptor Lmpl/ScopeCli;, so grep needs the
+       slash form; app_process takes the dotted class name (ScopeCli.CLI_CLASS). */
     const CLI_DEX_TOKEN = "mpl/ScopeCli";
     let cache = null;
     let pending = null;
 
-    /* 只用白名单化的绝对路径拼探测脚本，命令里没有任何用户输入。
-     * toybox grep 对二进制默认报 "Binary file ... matches"，个别版本没有 -a，两种写法都试。 */
+    /* Built only from whitelisted absolute paths, with no user input. toybox grep says
+       "Binary file ... matches" by default and some versions lack -a, so both are tried. */
     function probeScript(dirs) {
         const parts = [];
         dirs.forEach((dir) => {
@@ -206,33 +201,35 @@ const ModuleRoot = (() => {
             if (dirs.indexOf(dir) < 0) dirs.push(dir);
         });
 
-        let webuiDir = "";
-        let webuiRel = "";
+        const webuis = [];
         let dex = "";
         let output = "";
         try {
             output = await KsuExec.execText(probeScript(dirs));
         } catch (err) {
-            throw backendError("exec", "模块根探测失败：" + (err && err.reason ? err.reason : err && err.message));
+            throw backendError("exec", "module probe: " + (err && err.message));
         }
         String(output).split("\n").forEach((line) => {
             const value = line.trim();
-            if (value.indexOf("WEBUI ") === 0 && !webuiDir) {
+            if (value.indexOf("WEBUI ") === 0) {
                 const rest = value.slice(6).trim().split(/\s+/);
-                webuiDir = rest[0] || "";
-                webuiRel = rest[1] || "";
+                if (rest[0]) webuis.push({ dir: rest[0], rel: rest[1] || WEBUI_REL });
+            } else if (value.indexOf("DEX ") === 0 && !dex) {
+                dex = value.slice(4).trim();
             }
-            else if (value.indexOf("DEX ") === 0 && !dex) dex = value.slice(4).trim();
         });
 
         const dexRoot = dex ? dex.replace(/\/(?:(?:core|TEESimulatorRS_Core)\/)?classes\.dex$/, "") : "";
+        /* Every installed module is scanned, and another one may ship a webui.sh of its
+           own. Prefer the one beside our dex, or this page would drive that script. */
+        const chosen = webuis.filter((item) => item.dir === dexRoot)[0] || webuis[0] || { dir: "", rel: "" };
         return {
-            webui: webuiDir ? webuiDir + "/" + (webuiRel || WEBUI_REL) : "",
-            webuiRoot: webuiDir,
-            webuiRel: webuiRel || WEBUI_REL,
+            webui: chosen.dir ? chosen.dir + "/" + (chosen.rel || WEBUI_REL) : "",
+            webuiRoot: chosen.dir,
+            webuiRel: chosen.rel || WEBUI_REL,
             dex: dex,
             dexRoot: dexRoot,
-            root: webuiDir || dexRoot || "",
+            root: chosen.dir || dexRoot || "",
             scanned: dirs,
         };
     }
@@ -260,25 +257,25 @@ const ModuleRoot = (() => {
     return { resolve, reset, WEBUI_REL };
 })();
 
-/* ------------------------------ webui.sh 调用 ----------------------------- */
-/* 输出解析：JSON 用“从第一个 { 到最后一个 }”的宽松切法（app_process / ksu 会往
-   前后混日志），文本取最后一条非空行。所有 ok:false 都在这里变成带 code 的错误。 */
+/* ---------------------------- webui.sh calls ------------------------------ */
+/* app_process and ksu can mix log lines into the output, so JSON is cut from the first
+   { to the last }, and text is the last non-empty line. Every ok:false becomes an
+   error with a code here. */
+function parseJsonLoose(raw) {
+    const body = String(raw === undefined || raw === null ? "" : raw).replace(/^\uFEFF/, "");
+    const begin = body.indexOf("{");
+    const end = body.lastIndexOf("}");
+    if (begin < 0 || end <= begin) return null;
+    try {
+        const data = JSON.parse(body.slice(begin, end + 1));
+        return data && typeof data === "object" ? data : null;
+    } catch (e) {
+        return null;
+    }
+}
+
 const Webui = (() => {
     const DEFAULT_TIMEOUT = 15000;
-
-    function parseJsonLoose(raw) {
-        const body = String(raw === undefined || raw === null ? "" : raw).replace(/^\uFEFF/, "");
-        const begin = body.indexOf("{");
-        const end = body.lastIndexOf("}");
-        if (begin < 0 || end <= begin) return null;
-        const slice = body.slice(begin, end + 1);
-        try {
-            const data = JSON.parse(slice);
-            return data && typeof data === "object" ? data : null;
-        } catch (e) {
-            return null;
-        }
-    }
 
     function lastLine(raw) {
         const lines = String(raw === undefined || raw === null ? "" : raw)
@@ -290,12 +287,12 @@ const Webui = (() => {
         return "";
     }
 
-    /* webui.sh 的统一失败形态：{"ok":false,"error":"…"}；
-       unsupported 前缀归一成“后端明确不支持”，而不是普通报错。 */
+    /* An "unsupported" answer means the backend knows it cannot do this, which is
+       different from a failure. */
     function payloadError(data) {
         const detail = String(data.error || data.detail || data.message || "unknown");
         if (/^unsupported\b/i.test(detail)) {
-            return backendError("unsupported", detail.replace(/^unsupported[:：]?\s*/i, "") || "该命令");
+            return backendError("unsupported", detail.replace(/^unsupported:?\s*/i, ""));
         }
         return backendError("backend", detail);
     }
@@ -303,8 +300,8 @@ const Webui = (() => {
     function checkPayload(raw, options) {
         const data = parseJsonLoose(raw);
         if (!data || data.ok !== false) return data;
-        /* kbu_now 的 ok:false 是“这次更新失败”的业务结果（带 reason/status），
-           不是调用失败；只有带 error 字段才算调用失败。 */
+        /* kbu_now answers ok:false with reason and status when an update failed, which
+           is a result rather than a failed call; only an error field is a failed call. */
         if (options && options.allowFail && !data.error) return data;
         throw payloadError(data);
     }
@@ -315,8 +312,8 @@ const Webui = (() => {
             if (mod.dex) {
                 throw backendError("no_webui", (mod.root || "/data/adb/modules/<id>") + "/" + ModuleRoot.WEBUI_REL);
             }
-            throw backendError("no_moddir", "已扫描 " + mod.scanned.slice(0, 3).join("、") +
-                (mod.scanned.length > 3 ? " 等" : ""));
+            throw backendError("no_moddir", mod.scanned.slice(0, 3).join(", ") +
+                (mod.scanned.length > 3 ? ", ..." : ""));
         }
         const parts = ["sh", KsuExec.shellQuote(mod.webui)];
         (route.ksu || []).forEach((token) => parts.push(KsuExec.shellQuote(token)));
@@ -340,7 +337,7 @@ const Webui = (() => {
         const data = parseJsonLoose(rawText);
         if (!data) {
             const line = lastLine(rawText);
-            throw backendError("bad_json", line ? label + "：" + line.slice(0, 120) : label);
+            throw backendError("bad_json", line ? label + ": " + line.slice(0, 120) : label);
         }
         return data;
     }
@@ -355,7 +352,7 @@ const Webui = (() => {
         throw backendError("backend", line.slice(0, 120));
     }
 
-    /* 多行文本（targets 这类列表）：原样返回，不做“取最后一行” */
+    /* Multi-line text, returned as it is rather than as its last line. */
     async function blob(route, extra, options) {
         const rawText = await raw(route, extra, options);
         checkPayload(rawText);
@@ -365,8 +362,7 @@ const Webui = (() => {
     return { text, json, ack, blob };
 })();
 
-/* ------------------------------ Ultra HTTP 客户端 ----------------------------- */
-/* 端点清单与改动前逐字一致（tools/check_webui.py 仍然比对 C++ 路由表）。 */
+/* -------------------------------- Ultra HTTP ------------------------------ */
 
 function url(path) {
     return new URL(path, window.location.href).toString();
@@ -403,33 +399,31 @@ async function postJson(path, body) {
     }
 }
 
-/* ------------------------------ ScopeCli 兜底 ----------------------------- */
-/* webui.sh 的 scope 子命令不可用时，直接用 app_process 跑 mpl.ScopeCli ——
-   这就是「Soter 接管范围」改动前就在用的实现，命令与解析保持不变。 */
+/* ---------------------------- ScopeCli fallback --------------------------- */
+/* When webui.sh has no scope command, run mpl.ScopeCli through app_process directly. */
 const ScopeCli = (() => {
     const APP_PROCESS = "/system/bin/app_process";
     const CLI_CLASS = "mpl.ScopeCli";
 
-    /* app_process 会往输出里混日志（linker warning 等），先 trim 掉非 JSON 前后缀再 parse */
+    /* app_process mixes log lines (linker warnings and so on) into its output. */
     function parseCliJson(raw) {
         const body = String(raw === undefined || raw === null ? "" : raw).replace(/^\uFEFF/, "").trim();
         const begin = body.indexOf("{");
         const end = body.lastIndexOf("}");
         if (begin < 0 || end <= begin) {
-            throw backendError("bad_json", "ScopeCli 没有返回 JSON" +
-                (body ? "：" + body.slice(0, 160) : "（输出为空）"));
+            throw backendError("bad_json", "ScopeCli: " + (body ? body.slice(0, 160) : "no output"));
         }
         try {
             return JSON.parse(body.slice(begin, end + 1));
         } catch (e) {
-            throw backendError("bad_json", "ScopeCli 返回的 JSON 无法解析：" + body.slice(0, 160));
+            throw backendError("bad_json", "ScopeCli: " + body.slice(0, 160));
         }
     }
 
     async function run(args) {
         const mod = await ModuleRoot.resolve();
         if (!mod.dex || !mod.dexRoot) {
-            throw backendError("no_cli", "未找到包含 " + CLI_CLASS + " 的 classes.dex");
+            throw backendError("no_cli", "no classes.dex with " + CLI_CLASS);
         }
         const argv = [APP_PROCESS,
             "-Djava.class.path=" + KsuExec.shellQuote(mod.dex),
@@ -445,17 +439,17 @@ const ScopeCli = (() => {
     };
 })();
 
-/* -------------------------------- 后端层 -------------------------------- */
-/* Backend.call(name, …args) 是唯一入口：
-     name 是 webui.sh 的子命令（也是这里的逻辑命令名），Ultra 侧映射到 HTTP 端点。
-     返回类型与改动前一致（get* 返回文本/JSON，set* 返回 "OK" 或抛错）。 */
+/* ------------------------------ backend table ----------------------------- */
+/* Backend.call(name, ...args) is the only entry point. name is the webui.sh command,
+   mapped to an HTTP endpoint on Ultra. get* returns text or JSON; set* returns "OK"
+   or throws. */
 const Backend = (() => {
-    let capabilities = null;   /* null = 后端没声明能力清单 */
+    let capabilities = null;   /* null: the backend declared no capability list */
 
     const one = (args) => [String(args[0] === undefined ? "" : args[0])];
+    const flagOn = (value) => value === true || value === 1 || value === "1" || value === "on" || value === "true";
 
     const ROUTES = {
-        /* ---- 版本 / 补丁信息 ---- */
         info: {
             ksu: ["info"], mode: "json",
             http: () => postJson("/getVersionInfo"),
@@ -465,7 +459,6 @@ const Backend = (() => {
             http: () => post("/getVersion"),
         },
 
-        /* ---- SOTER 兼容开关 ---- */
         "get soter": {
             ksu: ["get", "soter"], mode: "text",
             http: () => post("/getSoterToggle"),
@@ -474,7 +467,7 @@ const Backend = (() => {
             ksu: ["set", "soter"], mode: "ack", arg: one,
             http: (args) => post("/setSoterToggle", String(args[0])),
         },
-        /* ---- SOTER 证书链（默认关闭；打开后 daemon 异步生成身份） ---- */
+        /* Off by default; once on, the daemon generates the identity in the background. */
         "get soter_certs": {
             ksu: ["get", "soter_certs"], mode: "json",
             http: () => postJson("/getSoterCerts"),
@@ -484,7 +477,6 @@ const Backend = (() => {
             http: (args) => post("/setSoterCerts", String(args[0])),
         },
 
-        /* ---- KeyBox ---- */
         keyboxes: {
             ksu: ["keyboxes"], mode: "json",
             http: () => postJson("/listKeyboxes"),
@@ -494,7 +486,6 @@ const Backend = (() => {
             http: (args) => post("/setKeybox", String(args[0])),
         },
 
-        /* ---- 系统伪装 ---- */
         "get hide_bootloader": {
             ksu: ["get", "hide_bootloader"], mode: "text",
             http: () => post("/getHideBootloaderToggle"),
@@ -529,7 +520,6 @@ const Backend = (() => {
             http: (args) => post("/setKeyTakeover", String(args[0])),
         },
 
-        /* ---- 安全补丁日期 ---- */
         "get patch": {
             ksu: ["get", "patch"], mode: "json",
             http: () => postJson("/getSecurityPatch"),
@@ -539,7 +529,6 @@ const Backend = (() => {
             http: (args) => post("/setSecurityPatch", String(args[0])),
         },
 
-        /* ---- 证书（keybox）自动更新 ---- */
         kbu_status: {
             ksu: ["kbu_status"], mode: "json",
             http: () => postJson("/keyboxUpdateStatus"),
@@ -554,9 +543,8 @@ const Backend = (() => {
             http: () => postJson("/keyboxUpdateNow"),
         },
 
-        /* ---- Soter 接管范围 ---- */
         "scope list": {
-            /* 列表带图标（base64），几百个应用时比其它命令慢，给 30s */
+            /* Carries base64 icons, so hundreds of apps take longer than other commands. */
             ksu: ["scope", "list"], mode: "json", timeout: 30000,
             http: () => postJson("/soterScope"),
         },
@@ -571,25 +559,30 @@ const Backend = (() => {
             http: () => postJson("/soterScopeSet", JSON.stringify({ all: true })),
         },
 
-        /* ---- 只读信息 ---- */
         targets: {
-            /* 列表类：保留换行，UI 才能数出条目 */
+            /* webui.sh answers {"count":N}, Ultra answers the file itself: see getTargetCount. */
             ksu: ["targets"], mode: "blob",
             http: () => post("/getTargetTxt"),
         },
-        /* ---- 诊断 ---- */
         "get debug": {
-            ksu: ["get", "debug"],
-            http: () => getJson("/debug"),
+            ksu: ["get", "debug"], mode: "json",
+            http: () => postJson("/debug"),
         },
         "set debug": {
             ksu: ["set", "debug"], mode: "ack",
-            arg: (args) => [args[0] ? "1" : "0"],
-            http: (args) => postJson("/debug", JSON.stringify({ enabled: !!args[0] })),
+            arg: (args) => [flagOn(args[0]) ? "1" : "0"],
+            http: (args) => postJson("/debug", JSON.stringify({ enabled: flagOn(args[0]) })),
         },
         logs: {
-            ksu: ["logs"], timeout: 30000,
-            http: () => post("/logs"),
+            /* The bundle includes a full compatibility check. */
+            ksu: ["logs"], mode: "json", timeout: 45000,
+            http: () => postJson("/logs"),
+        },
+
+        /* Only the KSU script backend has this. */
+        compat: {
+            ksu: ["compat"], mode: "json", timeout: 20000,
+            http: () => { throw backendError("unsupported", "compat"); },
         },
     };
 
@@ -613,7 +606,7 @@ const Backend = (() => {
         };
     }
 
-    /* true / false / null（未声明）。声明不支持的命令不再发出去。 */
+    /* true, false, or null when undeclared. A command declared unsupported is not sent. */
     function supports(name) {
         if (!isKsu() || !capabilities) return null;
         if (capabilities.unsupported && capabilities.unsupported.has(name)) return false;
@@ -621,26 +614,15 @@ const Backend = (() => {
         return null;
     }
 
-    /* 单行原因（给 toast / 日志用）：完整句子，含具体细节 */
-    function reason(err) {
-        return asBackendError(err, "unknown").reason;
-    }
-
-    /* 给 UI 的三态：failed（重试可能有用）/ unsupported（KSU 明确不支持）/ unavailable（后端缺失）。 */
+    /* unsupported: the backend says it cannot; unavailable: the backend itself is
+       missing; failed: anything else, where trying again can help. */
     function describe(err) {
         const normalized = asBackendError(err, "unknown");
         const code = normalized.code;
-        const detail = normalized.detail || normalized.reason || normalized.message;
-        if (code === "unsupported") {
-            return {
-                level: "unsupported", code: code,
-                text: "KSU 模式暂不支持（" + (detail ? detail + " · " : "") + "只读）",
-            };
-        }
-        if (code === "no_moddir" || code === "no_webui" || code === "no_cli" || code === "ksu_missing") {
-            return { level: "unavailable", code: code, text: "KSU 下不可用：" + normalized.reason };
-        }
-        return { level: "failed", code: code, text: "读取失败：" + normalized.reason };
+        let level = "failed";
+        if (code === "unsupported") level = "unsupported";
+        else if (["no_moddir", "no_webui", "no_cli", "ksu_missing"].indexOf(code) >= 0) level = "unavailable";
+        return { level: level, code: code, detail: normalized.detail };
     }
 
     async function call(name, ...args) {
@@ -672,13 +654,12 @@ const Backend = (() => {
         capabilities = null;
     }
 
-    return { call, isKsu, mode, supports, noteCapabilities, reason, describe, reset };
+    return { call, isKsu, mode, supports, noteCapabilities, describe, reset };
 })();
 
-/* -------------------------------- 数据归一 -------------------------------- */
-/* webui.sh 由 shell 拼 JSON，字段风格可能是 snake_case，这里统一成 main.js 认识
-   的 camelCase 形状；Ultra 的返回字段本来就对，原样通过。
-   错误一律抛：{ok:false,…} 视为失败（除非调用点明确允许业务失败）。 */
+/* ------------------------------ normalisers ------------------------------- */
+/* webui.sh builds its JSON in shell and field styles vary, so everything is brought to
+   the shape main.js expects here. */
 
 function unwrapPayload(raw) {
     let data = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
@@ -727,9 +708,8 @@ function normalizeInfo(raw) {
     };
 }
 
-/* SOTER 证书链：Ultra 与 KSU 返回同一形状；identity 只接受三个枚举值，
-   其它（旧 webui.sh 没有该命令、字段异常）按 missing 处理，UI 会显示"身份生成中…"
-   而不是假装 ready。 */
+/* identity takes three values; anything else counts as missing, so the UI says the
+   identity is still being generated rather than pretending it is ready. */
 function normalizeSoterCerts(raw) {
     const data = unwrapPayload(raw);
     const identityRaw = String(pickField(data, ["identity", "state"], "missing")).toLowerCase();
@@ -777,7 +757,7 @@ function normalizeKeyboxes(raw) {
         current_name: String(pickField(data, ["current_name", "current_label"], current)),
         active_id: activeId,
         active_name: String(pickField(data, ["active_name", "active_label"],
-            activeItem ? activeItem.name : "自定义（非内置）")),
+            activeItem ? activeItem.name : "")),
         active_sha_short: String(pickField(data, ["active_sha_short", "active_sha"],
             activeItem ? activeItem.sha_short : "unknown")),
         items: normalizedItems,
@@ -813,7 +793,7 @@ function normalizeKeyboxUpdate(raw) {
     const lastCheckEpoch = asNumber(pickField(data, ["lastCheckEpoch", "last_check_epoch", "lastCheck"], 0), 0);
     const enabled = asBool(pickField(data, ["enabled", "enable", "auto"], false), false);
     let nextEpoch = asNumber(pickField(data, ["nextEpoch", "next_epoch"], 0), 0);
-    /* shell 侧可能不算下次时间：按官方语义补一次（0 小时 = 每次开机检查） */
+    /* A backend may not compute the next run; 0 hours means on every boot. */
     if (!nextEpoch && enabled && intervalHours > 0 && lastCheckEpoch > 0) {
         nextEpoch = lastCheckEpoch + intervalHours * 3600;
     }
@@ -855,37 +835,45 @@ function normalizeScope(raw) {
     };
 }
 
-/* webui.sh 的 scope 子命令不可用（缺 webui.sh / 明确 unsupported / 未知子命令）时，
-   回退到改动前就在用的 app_process + mpl.ScopeCli。其它错误照原样抛出。 */
+/* Without a usable scope command in webui.sh, fall back to app_process + mpl.ScopeCli.
+   Any other error is passed on. */
 function canFallBackToCli(err) {
     const normalized = asBackendError(err, "unknown");
     if (normalized.code === "unsupported" || normalized.code === "no_webui" || normalized.code === "no_cli") {
         return true;
     }
     return normalized.code === "backend" &&
-        /unknown|unsupported|not\s*found|no\s*such|未实现|不支持|未知/i.test(normalized.detail || "");
+        /unknown|unsupported|not\s*found|no\s*such/i.test(normalized.detail || "");
 }
 
-/* -------------------------------- 接口层 -------------------------------- */
-/* 方法名与返回类型保持不变，main.js 的调用点不关心当前是 Ultra 还是 KSU。 */
+function normalizeCompat(raw) {
+    const data = unwrapPayload(raw);
+    const levels = ["ok", "info", "warn", "error"];
+    const items = (Array.isArray(data.items) ? data.items : []).map((item) => ({
+        level: levels.indexOf(String(item && item.level)) >= 0 ? String(item.level) : "info",
+        key: String((item && item.key) || ""),
+        a: String((item && item.a) || ""),
+        b: String((item && item.b) || ""),
+        c: String((item && item.c) || ""),
+    })).filter((item) => item.key.length > 0);
+    return { time: asNumber(data.time, 0), items: items };
+}
+
+/* --------------------------------- API ------------------------------------ */
+/* main.js calls these and does not care whether it is on Ultra or KSU. */
 const RequestApi = (() => {
-    /* ---- 版本 / 补丁信息 ---- */
     const getVersion = () => Backend.call("version");
     const getVersionInfo = async () => normalizeInfo(await Backend.call("info"));
 
-    /* ---- SOTER 兼容开关 ---- */
     const getSoterToggle = () => Backend.call("get soter");
     const setSoterToggle = (on) => Backend.call("set soter", on ? "1" : "0");
 
-    /* ---- SOTER 证书链 ---- */
     const getSoterCerts = async () => normalizeSoterCerts(await Backend.call("get soter_certs"));
     const setSoterCerts = (on) => Backend.call("set soter_certs", on ? "1" : "0");
 
-    /* ---- KeyBox ---- */
     const listKeyboxes = async () => normalizeKeyboxes(await Backend.call("keyboxes"));
     const setKeybox = (id) => Backend.call("keybox_set", id);
 
-    /* ---- 系统伪装 ---- */
     const getHideBootloaderToggle = () => Backend.call("get hide_bootloader");
     const setHideBootloaderToggle = (on) => Backend.call("set hide_bootloader", on ? "1" : "0");
     const getAutoThirdAppToggle = () => Backend.call("get auto_third_app");
@@ -893,16 +881,13 @@ const RequestApi = (() => {
     const getFixTeeToggle = () => Backend.call("get fix_tee");
     const setFixTeeToggle = (on) => Backend.call("set fix_tee", on ? "1" : "0");
 
-    /* ---- 安全补丁日期 ---- */
     const getSecurityPatch = async () => normalizePatch(await Backend.call("get patch"));
     const setSecurityPatch = (value) => Backend.call("set patch", value);
 
-    /* ---- 证书（keybox）自动更新 ---- */
     const keyboxUpdateStatus = async () => normalizeKeyboxUpdate(await Backend.call("kbu_status"));
     const keyboxUpdateConfig = (payload) => Backend.call("kbu_config", payload);
     const keyboxUpdateNow = async () => normalizeKeyboxUpdateNow(await Backend.call("kbu_now"));
 
-    /* ---- Soter 接管范围 ---- */
     async function soterScope() {
         if (!Backend.isKsu()) return normalizeScope(await Backend.call("scope list"));
         if (Backend.supports("scope list") === false) return normalizeScope(await ScopeCli.list());
@@ -910,7 +895,7 @@ const RequestApi = (() => {
             return normalizeScope(await Backend.call("scope list"));
         } catch (err) {
             if (!canFallBackToCli(err)) throw err;
-            console.warn("[scope] webui.sh scope list 不可用，回退 ScopeCli：", Backend.reason(err));
+            console.warn("[scope] falling back to ScopeCli:", err && err.message);
             return normalizeScope(await ScopeCli.list());
         }
     }
@@ -921,7 +906,7 @@ const RequestApi = (() => {
         const uids = (Array.isArray(body.uids) ? body.uids : [])
             .map((value) => Number(value))
             .filter((value) => Number.isInteger(value) && value > 0 && value <= 2147483647);
-        if (!all && !uids.length) throw new Error("没有选择任何应用");
+        if (!all && !uids.length) throw backendError("no_selection");
         if (!Backend.isKsu()) return Backend.call(all ? "scope setall" : "scope set", { all: all, uids: uids });
         if (Backend.supports(all ? "scope setall" : "scope set") === false) {
             return all ? ScopeCli.setAll() : ScopeCli.set(uids);
@@ -931,13 +916,34 @@ const RequestApi = (() => {
             return result && typeof result === "object" ? result : { ok: true, count: all ? undefined : uids.length };
         } catch (err) {
             if (!canFallBackToCli(err)) throw err;
-            console.warn("[scope] webui.sh scope set 不可用，回退 ScopeCli：", Backend.reason(err));
+            console.warn("[scope] falling back to ScopeCli:", err && err.message);
             return all ? ScopeCli.setAll() : ScopeCli.set(uids);
         }
     }
 
-    /* ---- 只读信息（保留端点） ---- */
     const getTargetTxt = () => Backend.call("targets");
+
+    async function getTargetCount() {
+        const raw = String(await getTargetTxt());
+        const data = parseJsonLoose(raw);
+        if (data && typeof data.count === "number") return data.count;
+        return raw.split("\n").filter((line) => {
+            const body = line.trim();
+            return body.length > 0 && body.charAt(0) !== "#";
+        }).length;
+    }
+
+    const getDebug = async () => asBool(unwrapPayload(await Backend.call("get debug")).enabled, false);
+    const setDebug = (on) => Backend.call("set debug", !!on);
+    const exportLogs = async () => {
+        const data = unwrapPayload(await Backend.call("logs"));
+        return { path: String(data.path || ""), bytes: asNumber(data.bytes, 0) };
+    };
+
+    const getKeyTakeover = async () => asBool(String(await Backend.call("get key_takeover")).trim(), false);
+    const setKeyTakeover = (on) => Backend.call("set key_takeover", on ? "1" : "0");
+
+    const compatCheck = async () => normalizeCompat(await Backend.call("compat"));
 
     return {
         getVersion,
@@ -957,6 +963,13 @@ const RequestApi = (() => {
         getSecurityPatch,
         setSecurityPatch,
         getTargetTxt,
+        getTargetCount,
+        getDebug,
+        setDebug,
+        exportLogs,
+        getKeyTakeover,
+        setKeyTakeover,
+        compatCheck,
         keyboxUpdateStatus,
         keyboxUpdateConfig,
         keyboxUpdateNow,

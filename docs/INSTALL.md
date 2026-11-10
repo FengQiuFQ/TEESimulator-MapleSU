@@ -42,7 +42,7 @@ su -c 'pid=$(pidof keystore2); grep -c libTEESimulator /proc/$pid/maps'
 
 此外还会检查 KeyBox 到期时间和远程证书服务的连通性。
 
-开机后可以在终端再查一次，这次还会包含模块进程、keystore2 注入和 Soter 状态：
+开机后打开 WebUI 会自动再查一次，结果显示在「兼容性检查」卡片里，这次还会包含模块进程、keystore2 注入和 Soter 状态。也可以在终端运行：
 
 ```bash
 su -c 'sh /data/adb/modules/tricky_store/core/compat.sh --text'

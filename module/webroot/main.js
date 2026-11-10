@@ -1,1001 +1,804 @@
 /* ==========================================================================
-   TEE 模拟器 WebUI 主逻辑
-   设置项：SOTER 兼容 / KeyBox / 隐藏 Bootloader / 自动 target / 安全补丁
-   外加：版本与补丁信息、轻量枫叶特效
+   MapleSU TEE WebUI: cards and their state.
+
+   Each card keeps what it last learned in a slot and draws itself from that slot, so
+   switching language only has to call renderAll(). Every read carries a token: an answer
+   older than the latest read or write of that slot is dropped, so a slow response can
+   never overwrite newer state. All text comes from TEEI18N, and every value reaches the
+   page through textContent, never as HTML.
    ========================================================================== */
 
-const UI = {
-    version: document.getElementById("module-version"),
-    soterToggle: document.getElementById("toggle-soter"),
-    soterTag: document.getElementById("soter-tag"),
-    soterSub: document.getElementById("soter-sub"),
-    soterCertsToggle: document.getElementById("toggle-soter-certs"),
-    soterCertsSub: document.getElementById("soter-certs-sub"),
-    soterCertsHint: document.getElementById("soter-certs-hint"),
-    keyboxActive: document.getElementById("keybox-active"),
-    keyboxActiveTag: document.getElementById("keybox-active-tag"),
-    keyboxSha: document.getElementById("keybox-sha"),
-    keyboxSelect: document.getElementById("keybox-select"),
-    keyboxApply: document.getElementById("btn-apply-keybox"),
-    hideBl: document.getElementById("toggle-hide-bl"),
-    autoTarget: document.getElementById("toggle-auto-target"),
-    targetSub: document.getElementById("target-sub"),
-    patchMode: document.getElementById("patch-mode"),
-    patchFixedRow: document.getElementById("patch-fixed-row"),
-    patchDate: document.getElementById("patch-date"),
-    patchApply: document.getElementById("btn-apply-patch"),
-    patchDevice: document.getElementById("patch-device"),
-    patchEffective: document.getElementById("patch-effective"),
-    kbupdTag: document.getElementById("kbupd-tag"),
-    kbupdToggle: document.getElementById("toggle-kbupd"),
-    kbupdSub: document.getElementById("kbupd-sub"),
-    kbupdSource: document.getElementById("kbupd-source"),
-    kbupdCustomRow: document.getElementById("kbupd-custom-row"),
-    kbupdCustomUrl: document.getElementById("kbupd-custom-url"),
-    kbupdInterval: document.getElementById("kbupd-interval"),
-    kbupdSave: document.getElementById("btn-kbupd-save"),
-    kbupdNow: document.getElementById("btn-kbupd-now"),
-    kbupdLast: document.getElementById("kbupd-last"),
-    kbupdResult: document.getElementById("kbupd-result"),
-    kbupdNext: document.getElementById("kbupd-next"),
-    kbupdUrl: document.getElementById("kbupd-url"),
-    scopeTag: document.getElementById("scope-tag"),
-    scopeAlert: document.getElementById("scope-alert"),
-    scopeAlertText: document.getElementById("scope-alert-text"),
-    scopeNarrow: document.getElementById("scope-narrow"),
-    scopeSearch: document.getElementById("scope-search"),
-    scopeSelectAll: document.getElementById("scope-select-all"),
-    scopeInvert: document.getElementById("scope-invert"),
-    scopeClear: document.getElementById("scope-clear"),
-    scopeCount: document.getElementById("scope-count"),
-    scopeList: document.getElementById("scope-list"),
-    scopeEmpty: document.getElementById("scope-empty"),
-    scopeError: document.getElementById("scope-error"),
-    scopeSave: document.getElementById("scope-save"),
-    scopeRestore: document.getElementById("scope-restore"),
-    scopeRetry: document.getElementById("scope-retry"),
-    scopeHint: document.getElementById("scope-hint"),
-    verVersion: document.getElementById("ver-version"),
-    verAuthor: document.getElementById("ver-author"),
-    verDex: document.getElementById("ver-dex"),
-    verKeybox: document.getElementById("ver-keybox"),
-    verBuild: document.getElementById("ver-build"),
-    snowBtn: document.getElementById("btn-snow"),
-    pageState: document.getElementById("page-state"),
-    pageDetail: document.getElementById("page-detail"),
-    backendMode: document.getElementById("backend-mode"),
-    hideBlSub: document.getElementById("hide-bl-sub"),
-    fixTee: document.getElementById("toggle-fix-tee"),
-    fixTeeSub: document.getElementById("fix-tee-sub"),
-};
+const t = TEEI18N.t;
+const $ = (id) => document.getElementById(id);
 
-/* --------------------------------- 工具 --------------------------------- */
+const DASH = "—";
+const KEYBOX_PATH = "/data/adb/tricky_store/keybox.xml";
+const KEYBOX_POLL_MS = 15000;
+const CERTS_POLL_MS = 800;
+const CERTS_POLL_ATTEMPTS = 10;
 
-const text = (el, v, fallback) => {
-    if (el) el.textContent = v === undefined || v === null || v === "" ? (fallback || "—") : v;
-};
-
-function setBusy(btn, busy, label) {
-    if (!btn) return;
-    btn.disabled = !!busy;
-    if (busy) {
-        btn.dataset.label = btn.textContent;
-        btn.textContent = label || "处理中…";
-    } else if (btn.dataset.label) {
-        btn.textContent = btn.dataset.label;
-        delete btn.dataset.label;
-    }
+function slot(extra) {
+    return Object.assign({ token: 0, status: "loading", data: null, err: null, saving: false }, extra);
 }
 
-const isOk = (r) => String(r).trim() === "OK";
-let supportsKeyboxUpdate = false;
+const state = {
+    info: slot(),
+    soter: slot(),
+    certs: slot({ pollToken: 0 }),
+    keybox: slot({ pick: null, optionsKey: "", applying: false }),
+    kbu: slot({ status: "idle" }),
+    hideBl: slot(),
+    autoTarget: slot({ count: null }),
+    patch: slot({ mode: "auto" }),
+    debug: slot({ status: "idle", result: null }),
+    takeover: slot({ status: "idle" }),
+    compat: slot({ status: "idle", hidden: true, showAll: false }),
+};
+
 let pageLoading = false;
 
-/* SOTER 证书链：daemon 收到开关后会异步生成身份（几百 ms 到几秒），
-   前端只做有上限的轮询，不假设"写完开关就 ready"。 */
-const SOTER_CERTS_HINT_ON = "≤1 秒生效；链使用内置 keybox（可验到 Key Attestation CA1）";
-const SOTER_CERTS_HINT_OFF = "与 6.0.6 及更早版本行为一致（blob 718 B，无 certs）";
-const SOTER_CERTS_POLL_MS = 600;
-let soterCertsPollToken = 0;
+/* --------------------------------- helpers -------------------------------- */
 
-/* --------------------------- 面板状态与失败登记 --------------------------- */
-/* 顶部提示只在“真的有面板读失败”时出现，而且不再写“刷新一下就好”：
-   原因来自后端（KSU 下是 webui.sh 的真实报错），卡片里各自带重试按钮。
-   KSU 明确不支持的项记进 pageReadOnly，显示“KSU 模式暂不支持（只读）”。 */
-const pageFailures = new Map();    /* panelId -> {label, text, level, error} */
-const pageReadOnly = new Map();    /* panelId -> {label, text} */
+function setText(el, value) {
+    el.textContent = value === undefined || value === null || value === "" ? DASH : String(value);
+}
 
-function renderPageState() {
-    const state = UI.pageState;
-    if (!state) return;
-    const detail = UI.pageDetail;
-    if (pageLoading) {
-        state.textContent = "正在更新设置…";
-        if (detail) detail.hidden = true;
-        return;
-    }
-    const failed = [...pageFailures.values()];
-    const readOnly = [...pageReadOnly.values()];
-    if (!failed.length && !readOnly.length) {
-        state.textContent = "设置已更新";
-        if (detail) { detail.hidden = true; detail.textContent = ""; }
-        return;
-    }
-    if (failed.length) {
-        state.textContent = failed.length + " 项设置未读取";
-        if (detail) {
-            detail.textContent = failed.map((item) => item.label).join("、") +
-                (readOnly.length ? " · 另有 " + readOnly.length + " 项在当前后端不可用" : "") +
-                " · 原因见下方卡片";
-        }
+function setChip(el, tone, text) {
+    el.hidden = !text;
+    el.textContent = text || "";
+    if (tone) el.setAttribute("data-tone", tone);
+    else el.removeAttribute("data-tone");
+}
+
+/* A button stays disabled for as long as it shows a busy label. */
+function setEnabled(control, on) {
+    control.disabled = !on || !!(control.dataset && control.dataset.busyKey);
+}
+
+function setBusy(button, key) {
+    if (key) {
+        button.dataset.busyKey = key;
+        button.disabled = true;
+        button.textContent = t(key);
     } else {
-        state.textContent = "已加载 · " + readOnly.length + " 项在当前后端不可用";
-        if (detail) detail.textContent = "只读：" + readOnly.map((item) => item.label).join("、");
+        delete button.dataset.busyKey;
+        button.disabled = false;
+        button.textContent = t(button.getAttribute("data-i18n"));
     }
-    if (detail) detail.hidden = false;
 }
 
-function noteFailure(id, label, err) {
-    const described = Backend.describe(err);
-    pageFailures.set(id, { label: label, text: described.text, level: described.level, error: err });
-    pageReadOnly.delete(id);
-    console.warn("[panel] " + label + " · " + described.text, err);
-    if (!pageLoading) renderPageState();
+let toastTimer = 0;
+
+function showToast(message, isError) {
+    const toast = $("toast");
+    toast.textContent = message;
+    toast.classList.add("is-visible");
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove("is-visible"), isError ? 5000 : 2500);
 }
 
-function clearFailure(id) {
-    const gone = pageFailures.delete(id) | pageReadOnly.delete(id);
-    if (gone && !pageLoading) renderPageState();
-}
+const isOk = (reply) => String(reply).trim() === "OK";
 
-/* 后端在 info 里声明不支持（或运行期返回 unsupported）→ 只读，不假装成功 */
-function noteUnavailable(id, label, message) {
-    pageReadOnly.set(id, { label: label, text: message });
-    pageFailures.delete(id);
-    if (!pageLoading) renderPageState();
-    return message;
-}
-
-function noteReadOnly(id, label, detail) {
-    return noteUnavailable(id, label,
-        "KSU 模式暂不支持（" + (detail ? detail + " · " : "") + "只读）");
-}
-
-/* 卡片头部标签按级别选词：读失败 / 明确不支持 / 后端缺失 */
-function tagText(level) {
-    if (level === "unsupported") return "KSU 不支持";
-    if (level === "unavailable") return "不可用";
-    return "读取失败";
-}
-
-/* 命令级只读判定：info 声明了 unsupported 就直接返回原因，不再发命令 */
-function readOnlyReason(id, label, command) {
-    return Backend.supports(command) === false ? noteReadOnly(id, label, command) : null;
-}
-
-/* 失败态统一的重试入口：
-     failed       → 「重试」重跑本面板；
-     unavailable  → 「重新检测」先清掉 $MODDIR/webui.sh 缓存再重跑（装/卸模块后有用）；
-     unsupported  → 不给按钮（后端已明确不支持，点也没用），卡片只读。 */
-function panelOptions(described, loader) {
-    if (described.level === "unsupported") return { readonly: true };
-    if (described.level === "unavailable") {
-        return {
-            readonly: true,
-            retryLabel: "重新检测",
-            retry: () => { Backend.reset(); loader(); },
-        };
+/* The words for a token the backend answers with, such as write_failed, or null. */
+function tokenWords(token) {
+    const keys = ["backend.token." + token, "kbu.reason." + token];
+    for (let i = 0; i < keys.length; i += 1) {
+        if (TEEI18N.has(keys[i])) return t(keys[i]);
     }
-    return { retry: loader, retryLabel: "重试" };
+    return null;
 }
 
-/* 卡片内的状态条：一句具体原因 + 重试/重新检测按钮。 */
-const PanelStatus = (() => {
-    const blocks = new WeakMap();
-
-    function block(card) {
-        if (!card) return null;
-        if (blocks.has(card)) return blocks.get(card);
-        const wrap = document.createElement("div");
-        wrap.className = "panel-status";
-        wrap.hidden = true;
-        wrap.setAttribute("role", "status");
-        const label = document.createElement("span");
-        label.className = "panel-status-text";
-        const retry = document.createElement("button");
-        retry.type = "button";
-        retry.className = "btn panel-status-retry";
-        retry.textContent = "重试";
-        wrap.appendChild(label);
-        wrap.appendChild(retry);
-        const head = card.querySelector(".card-head");
-        const summary = card.querySelector("summary");
-        if (head && head.parentNode === card) head.insertAdjacentElement("afterend", wrap);
-        else if (summary && summary.parentNode === card) summary.insertAdjacentElement("afterend", wrap);
-        else card.insertBefore(wrap, card.firstChild);
-        const entry = { wrap: wrap, label: label, retry: retry };
-        blocks.set(card, entry);
-        return entry;
-    }
-
-    function show(card, message, options) {
-        const entry = block(card);
-        if (!entry) return;
-        entry.label.textContent = message;
-        entry.wrap.hidden = false;
-        entry.wrap.classList.toggle("is-readonly", !!(options && options.readonly));
-        const retry = options && options.retry;
-        entry.retry.textContent = (options && options.retryLabel) || "重试";
-        entry.retry.hidden = typeof retry !== "function";
-        entry.retry.onclick = typeof retry === "function" ? () => { retry(); } : null;
-    }
-
-    function clear(card) {
-        if (!card || !blocks.has(card)) return;
-        const entry = blocks.get(card);
-        entry.wrap.hidden = true;
-        entry.label.textContent = "";
-        entry.retry.hidden = true;
-        entry.retry.onclick = null;
-    }
-
-    return { show, clear };
-})();
-
-/* 卡片选择器：从已有控件往上找，不额外加 id */
-const versionCard = () => document.querySelector("details.card-flat");
-const soterCard = () => UI.soterToggle.closest(".card");
-const keyboxCard = () => UI.keyboxSelect.closest(".card");
-const systemCard = () => UI.hideBl.closest(".card");
-const patchCard = () => UI.patchMode.closest(".card");
-const kbupdCard = () => document.getElementById("keybox-updates");
-
-
-/* 日期：prop / 空 / 非法值统一显示 */
-function prettyDate(v) {
-    if (!v) return "未知";
-    if (v === "prop") return "跟随设备";
-    return v;
+/* Handles write_failed, invalid_keybox:no_key and download_failed(curl=6,wget=127).
+   Returns null for anything it does not recognise. */
+function tokenText(raw) {
+    const match = /^([A-Za-z_]+)(?:[:(]([^)]*)\)?)?$/.exec(String(raw || "").replace(/^FAILED:/, ""));
+    if (!match) return null;
+    const base = tokenWords(match[1]);
+    if (!base) return null;
+    if (!match[2]) return base;
+    return t("err.withDetail", { message: base, detail: tokenWords(match[2]) || match[2] });
 }
 
-/* ------------------------------ 读取状态 ------------------------------ */
+function errorText(err) {
+    const normalized = asBackendError(err, "unknown");
+    if (normalized.code === "backend") {
+        const words = tokenText(normalized.detail);
+        if (words) return words;
+    }
+    const message = t("err." + normalized.code);
+    return normalized.detail ? t("err.withDetail", { message: message, detail: normalized.detail }) : message;
+}
 
-async function loadVersionInfo() {
-    supportsKeyboxUpdate = false;
+function describeError(err) {
+    const info = Backend.describe(err);
+    if (info.level === "unsupported") {
+        return { level: info.level, text: t("err.panelUnsupported", { detail: info.detail || DASH }) };
+    }
+    const key = info.level === "unavailable" ? "err.panelUnavailable" : "err.panelFailed";
+    return { level: info.level, text: t(key, { reason: errorText(err) }) };
+}
+
+function setErrorChip(chip, err) {
+    const level = Backend.describe(err).level;
+    if (level === "unsupported") setChip(chip, null, t("common.unsupported"));
+    else if (level === "unavailable") setChip(chip, null, t("common.unavailable"));
+    else setChip(chip, "err", t("common.readFailed"));
+}
+
+function requireSupport(command) {
+    if (Backend.supports(command) === false) throw backendError("unsupported", command);
+}
+
+/* Runs a read into a slot. Returns false when a newer read or write has taken over.
+   A quiet read (the background poll) keeps the last good state if it fails. */
+async function read(target, task, options) {
+    target.token += 1;
+    const token = target.token;
     try {
-        const info = await RequestApi.getVersionInfo();
-        text(UI.version, info.version);
-        text(UI.verVersion, info.version);
-        text(UI.verAuthor, info.author);
-        text(UI.verDex, info.dex_short);
-        text(UI.verKeybox, info.keybox_short);
-        text(UI.verBuild, info.build);
-        const version = /^(\d+)\.(\d+)\.(\d+)/.exec(String(info.version || ""));
-        supportsKeyboxUpdate = !!version && (Number(version[1]) > 6 ||
-            (Number(version[1]) === 6 && (Number(version[2]) > 0 || Number(version[3]) >= 5)));
-        document.getElementById("keybox-updates").hidden = !supportsKeyboxUpdate;
-        clearFailure("version");
-        PanelStatus.clear(versionCard());
-        return info;
+        const data = await task();
+        if (token !== target.token) return false;
+        target.status = "ready";
+        target.data = data;
+        target.err = null;
     } catch (err) {
-        const described = Backend.describe(err);
-        noteFailure("version", "版本信息", err);
-        text(UI.version, "读取失败");
-        text(UI.verVersion, described.level === "failed" ? "读取失败" : "不可用");
-        text(UI.verAuthor, "—");
-        text(UI.verDex, "—");
-        text(UI.verKeybox, "—");
-        text(UI.verBuild, "—");
-        document.getElementById("keybox-updates").hidden = true;
-        PanelStatus.show(versionCard(), described.text, panelOptions(described, retryVersion));
-    }
-}
-
-async function retryVersion() {
-    const info = await loadVersionInfo();
-    if (info && supportsKeyboxUpdate) loadKeyboxUpdate();
-}
-
-async function loadSoter() {
-    const card = soterCard();
-    const readonly = readOnlyReason("soter", "SOTER 兼容", "get soter");
-    if (readonly) {
-        UI.soterTag.textContent = "KSU 不支持";
-        UI.soterTag.classList.remove("is-on");
-        UI.soterSub.textContent = readonly;
-        UI.soterToggle.disabled = true;
-        PanelStatus.show(card, readonly, { readonly: true });
-        return;
-    }
-    try {
-        const on = String(await RequestApi.getSoterToggle()).trim() === "1";
-        UI.soterToggle.checked = on;
-        applySoterUI(on);
-        UI.soterToggle.disabled = false;
-        clearFailure("soter");
-        PanelStatus.clear(card);
-    } catch (err) {
-        const described = Backend.describe(err);
-        noteFailure("soter", "SOTER 兼容", err);
-        UI.soterTag.textContent = tagText(described.level);
-        UI.soterTag.classList.remove("is-on");
-        UI.soterSub.textContent = described.text;
-        UI.soterToggle.disabled = true;
-        PanelStatus.show(card, described.text, panelOptions(described, loadSoter));
-    }
-}
-
-function applySoterUI(on) {
-    UI.soterTag.textContent = on ? "已开启" : "已关闭";
-    UI.soterTag.classList.toggle("is-on", on);
-    UI.soterSub.textContent = on ? "已启用 · 保存后自动生效（≤1 秒）" : "已关闭 · 使用设备原有行为";
-}
-
-/* ------------------------- SOTER 证书链（可选增强） ------------------------- */
-/* 状态文字严格按后端三个字段渲染：
-     enabled=false                 -> 关闭（默认关闭）
-     enabled && identity=ready     -> 已开启：<certs> 段证书链
-     enabled && identity≠ready     -> 已开启：身份生成中…
-   读取失败/后端不支持            -> 不可用：<原因>
-   关闭时 identity 可能是上一次留下的 ready（daemon 只清 saterserver 镜像），
-   这里不看它，避免把"已关闭"显示成"已开启"。 */
-function applySoterCertsUI(data) {
-    const enabled = !!(data && data.enabled);
-    const identity = String((data && data.identity) || "missing");
-    const certs = Number(data && data.certs);
-    UI.soterCertsToggle.checked = enabled;
-    if (!enabled) {
-        UI.soterCertsSub.textContent = "关闭（默认关闭）";
-    } else if (identity === "ready") {
-        UI.soterCertsSub.textContent = "已开启：" + (Number.isFinite(certs) ? certs : 0) + " 段证书链";
-    } else {
-        UI.soterCertsSub.textContent = "已开启：身份生成中…";
-    }
-    UI.soterCertsHint.textContent = enabled ? SOTER_CERTS_HINT_ON : SOTER_CERTS_HINT_OFF;
-    UI.soterCertsToggle.disabled = false;
-}
-
-function soterCertsNeedsPoll(data) {
-    return !!(data && data.enabled && String(data.identity) !== "ready");
-}
-
-async function pollSoterCerts(token, attempts) {
-    if (token !== soterCertsPollToken) return;
-    try {
-        const data = await RequestApi.getSoterCerts();
-        if (token !== soterCertsPollToken) return;
-        applySoterCertsUI(data);
-        clearFailure("soter_certs");
-        if (soterCertsNeedsPoll(data) && attempts > 0) {
-            setTimeout(() => { pollSoterCerts(token, attempts - 1); }, SOTER_CERTS_POLL_MS);
-        }
-    } catch (err) {
-        /* 轮询失败保留最后一次成功状态；下次手动刷新会重新读。 */
-    }
-}
-
-async function loadSoterCerts() {
-    const readonly = readOnlyReason("soter_certs", "SOTER 证书链", "get soter_certs");
-    if (readonly) {
-        UI.soterCertsSub.textContent = "不可用：" + readonly;
-        UI.soterCertsHint.textContent = "";
-        UI.soterCertsToggle.checked = false;
-        UI.soterCertsToggle.disabled = true;
-        return;
-    }
-    try {
-        const data = await RequestApi.getSoterCerts();
-        applySoterCertsUI(data);
-        clearFailure("soter_certs");
-    } catch (err) {
-        const described = Backend.describe(err);
-        noteFailure("soter_certs", "SOTER 证书链", err);
-        UI.soterCertsSub.textContent = "不可用：" + (described.level === "failed"
-            ? described.text.replace(/^读取失败：/, "") : described.text);
-        UI.soterCertsHint.textContent = "";
-        UI.soterCertsToggle.checked = false;
-        UI.soterCertsToggle.disabled = true;
-    }
-}
-
-const keyboxWarning = () => document.getElementById("keybox-warning");
-
-/* The module deliberately does nothing without a keybox; surface that as a banner
-   rather than leaving the user to infer it from an empty certificate panel. */
-function setKeyboxWarning(show) {
-    const node = keyboxWarning();
-    if (node) node.hidden = !show;
-}
-
-async function loadKeyboxes() {
-    const card = keyboxCard();
-    const readonly = readOnlyReason("keybox", "KeyBox", "keyboxes");
-    if (readonly) {
-        UI.keyboxActiveTag.textContent = "KSU 不支持";
-        UI.keyboxActiveTag.classList.remove("tag-outline");
-        text(UI.keyboxActive, "只读");
-        text(UI.keyboxSha, "—");
-        UI.keyboxSelect.disabled = true;
-        UI.keyboxApply.disabled = true;
-        PanelStatus.show(card, readonly, { readonly: true });
-        return;
-    }
-    try {
-        const data = await RequestApi.listKeyboxes();
-        const items = data.items || [];
-        UI.keyboxSelect.innerHTML = "";
-        items.forEach((it) => {
-            const opt = document.createElement("option");
-            opt.value = it.id;
-            opt.textContent = it.sha_short && it.sha_short !== "unknown"
-                ? `${it.name} · ${it.sha_short}`
-                : it.name;
-            if (it.id === data.current) opt.selected = true;
-            UI.keyboxSelect.appendChild(opt);
-        });
-        const available = items.filter((it) => it.available !== false);
-        /* A custom keybox is not a "built-in candidate", so the list would only
-           contain an unavailable entry. Show what is actually in use instead. */
-        if (data.installed && !available.length) {
-            UI.keyboxSelect.innerHTML = "";
-            const option = document.createElement("option");
-            option.value = "custom-active";
-            option.textContent = "自定义 KeyBox（当前生效）";
-            option.selected = true;
-            UI.keyboxSelect.appendChild(option);
-        }
-        const activeName = data.active_name || data.current_name || "未知";
-        text(UI.keyboxActive, activeName);
-        text(UI.keyboxSha, data.active_sha_short && data.active_sha_short !== "unknown"
-            ? data.active_sha_short
-            : "自定义");
-        text(UI.keyboxActiveTag, !data.installed ? "未配置"
-            : (data.active_id === "custom" ? "自定义" : "当前生效"));
-        UI.keyboxActiveTag.classList.toggle("tag-outline",
-            !data.installed || data.active_id === "custom");
-        UI.keyboxSelect.disabled = !available.length;
-        UI.keyboxApply.disabled = !available.length;
-        clearFailure("keybox");
-        PanelStatus.clear(card);
-        setKeyboxWarning(!data.installed);
-        if (!data.installed) {
-            const probe = data.probe || {};
-            let reason = "未安装 KeyBox：请把 keybox.xml 放到 /data/adb/tricky_store/keybox.xml";
-            if (probe.exists && !probe.size) {
-                reason = "KeyBox 文件存在但为空（0 字节）";
-            } else if (probe.exists) {
-                reason = "KeyBox 文件存在但无法读取，请检查权限与 SELinux 上下文";
-            }
-            PanelStatus.show(card, reason, { readonly: true });
-        } else if (!available.length) {
-            PanelStatus.show(card,
-                "已使用自定义 KeyBox（内置源不可用，切换已禁用）", { readonly: true });
-        }
-    } catch (err) {
-        const described = Backend.describe(err);
-        setKeyboxWarning(true);
-        noteFailure("keybox", "KeyBox", err);
-        UI.keyboxActiveTag.textContent = tagText(described.level);
-        UI.keyboxActiveTag.classList.remove("tag-outline");
-        text(UI.keyboxActive, "未读取");
-        text(UI.keyboxSha, "—");
-        UI.keyboxSelect.innerHTML = "";
-        UI.keyboxSelect.disabled = true;
-        UI.keyboxApply.disabled = true;
-        PanelStatus.show(card, described.text, panelOptions(described, loadKeyboxes));
-    }
-}
-
-/* ---- 系统伪装：三个开关各自独立读取，卡片级汇总原因 + 重试 ---- */
-const SYSTEM_PANELS = ["hide_bl", "auto_target", "fix_tee"];
-
-function refreshSystemPanel() {
-    const card = systemCard();
-    if (!card) return;
-    const failed = SYSTEM_PANELS.filter((id) => pageFailures.has(id));
-    const readonly = SYSTEM_PANELS.filter((id) => pageReadOnly.has(id));
-    if (failed.length) {
-        const levels = failed.map((id) => pageFailures.get(id).level);
-        const options = levels.indexOf("unavailable") >= 0
-            ? { readonly: true, retryLabel: "重新检测", retry: () => { Backend.reset(); loadSystemToggles(); } }
-            : { retry: loadSystemToggles, retryLabel: "重试" };
-        PanelStatus.show(card, failed.map((id) => pageFailures.get(id).text).join("；"), options);
-    } else if (readonly.length) {
-        PanelStatus.show(card, readonly.map((id) => pageReadOnly.get(id).text).join("；"), { readonly: true });
-    } else {
-        PanelStatus.clear(card);
-    }
-}
-
-async function loadHideBootloader() {
-    const readonly = readOnlyReason("hide_bl", "解锁状态兼容", "get hide_bootloader");
-    if (readonly) {
-        UI.hideBl.disabled = true;
-        text(UI.hideBlSub, readonly);
-        return;
-    }
-    try {
-        const on = String(await RequestApi.getHideBootloaderToggle()).trim() === "1";
-        UI.hideBl.checked = on;
-        UI.hideBl.disabled = false;
-        text(UI.hideBlSub, "使用模块已有的设备状态兼容设置");
-        clearFailure("hide_bl");
-    } catch (err) {
-        const described = Backend.describe(err);
-        noteFailure("hide_bl", "解锁状态兼容", err);
-        UI.hideBl.disabled = true;
-        text(UI.hideBlSub, described.text);
-    }
-}
-
-async function loadAutoThirdApp() {
-    const readonly = readOnlyReason("auto_target", "应用列表自动维护", "get auto_third_app");
-    if (readonly) {
-        UI.autoTarget.disabled = true;
-        text(UI.targetSub, readonly);
-        return;
-    }
-    try {
-        const auto = String(await RequestApi.getAutoThirdAppToggle()).trim() === "1";
-        UI.autoTarget.checked = auto;
-        UI.autoTarget.disabled = false;
-        clearFailure("auto_target");
-        await refreshTargetSub(auto);
-    } catch (err) {
-        const described = Backend.describe(err);
-        noteFailure("auto_target", "应用列表自动维护", err);
-        UI.autoTarget.disabled = true;
-        text(UI.targetSub, described.text);
-    }
-}
-
-/* TEE 修复：三版 dex 都没有 tee_status 消费者（TEE 是否可用由运行时 KeyStore 探针
- * t4/j 判定），Ultra 后端 /getFixTeeToggle 已按 unsupported:fix_tee 应答。这里不再发
- * 命令、直接置灰只读，避免再次显示"开了就修复"的假状态。 */
-const FIX_TEE_UNSUPPORTED = "未实现 · TEE 判定由运行时 KeyStore 探针决定，无需开关";
-
-async function loadFixTee() {
-    if (!UI.fixTee) return;
-    UI.fixTee.checked = false;
-    UI.fixTee.disabled = true;
-    text(UI.fixTeeSub, FIX_TEE_UNSUPPORTED);
-}
-
-async function loadSystemToggles() {
-    await Promise.all([loadHideBootloader(), loadAutoThirdApp(), loadFixTee()]);
-    refreshSystemPanel();
-}
-
-async function refreshTargetSub(auto) {
-    if (!UI.targetSub) return;
-    if (!auto) {
-        UI.targetSub.textContent = "已关闭 · 保留手动维护的应用列表";
-        return;
-    }
-    let count = null;
-    try {
-        const raw = await RequestApi.getTargetTxt();
-        count = raw.split("\n").filter((l) => l.trim().length > 0).length;
-    } catch (err) {
-        /* 只读计数失败不影响开关状态显示（KSU 的 webui.sh 可能没有 targets 命令） */
-    }
-    UI.targetSub.textContent = count === null
-        ? "已开启 · 安装 / 卸载应用后自动刷新"
-        : `已开启 · 当前 ${count} 个目标应用`;
-}
-
-let patchMode = "auto";
-
-async function loadSecurityPatch() {
-    const card = patchCard();
-    const readonly = readOnlyReason("patch", "安全补丁日期", "get patch");
-    if (readonly) {
-        applyPatchModeUI("auto");
-        text(UI.patchDevice, "只读");
-        text(UI.patchEffective, "只读");
-        UI.patchApply.disabled = true;
-        UI.patchDate.disabled = true;
-        UI.patchMode.querySelectorAll("button").forEach((button) => { button.disabled = true; });
-        PanelStatus.show(card, readonly, { readonly: true });
-        return;
-    }
-    try {
-        const data = await RequestApi.getSecurityPatch();
-        patchMode = data.mode === "fixed" ? "fixed" : "auto";
-        applyPatchModeUI(patchMode);
-        if (patchMode === "fixed" && data.value) UI.patchDate.value = data.value;
-        text(UI.patchDevice, prettyDate(data.device));
-        text(UI.patchEffective, prettyDate(data.effective));
-        UI.patchApply.disabled = false;
-        UI.patchDate.disabled = false;
-        UI.patchMode.querySelectorAll("button").forEach((button) => { button.disabled = false; });
-        clearFailure("patch");
-        PanelStatus.clear(card);
-    } catch (err) {
-        const described = Backend.describe(err);
-        noteFailure("patch", "安全补丁日期", err);
-        text(UI.patchDevice, tagText(described.level));
-        text(UI.patchEffective, tagText(described.level));
-        UI.patchApply.disabled = true;
-        UI.patchDate.disabled = true;
-        UI.patchMode.querySelectorAll("button").forEach((button) => { button.disabled = true; });
-        PanelStatus.show(card, described.text, panelOptions(described, loadSecurityPatch));
-    }
-}
-
-function applyPatchModeUI(mode) {
-    patchMode = mode;
-    [...UI.patchMode.querySelectorAll(".seg-btn")].forEach((b) => {
-        b.classList.toggle("is-active", b.dataset.mode === mode);
-    });
-    UI.patchFixedRow.classList.toggle("is-visible", mode === "fixed");
-}
-
-/* ------------------------------ 写入状态 ------------------------------ */
-
-async function saveToggle(el, setter, okMsg, failMsg) {
-    const want = el.checked;
-    el.disabled = true;
-    try {
-        const r = await setter(want);
-        if (!isOk(r)) throw new Error(String(r));
-        showToast(okMsg);
-        return true;
-    } catch (err) {
-        el.checked = !want;
-        console.error(failMsg, err);
-        showToast(failMsg + "：" + Backend.reason(err));
-        return false;
-    } finally {
-        el.disabled = false;
-    }
-}
-
-async function onSoterToggle() {
-    const want = UI.soterToggle.checked;
-    UI.soterToggle.disabled = true;
-    applySoterUI(want);
-    try {
-        const r = await RequestApi.setSoterToggle(want);
-        if (!isOk(r)) throw new Error(String(r));
-        applySoterUI(want);
-        showToast(want ? "已开启 SOTER 兼容，保存后自动生效（≤1 秒）"
-                       : "已关闭 SOTER 兼容，保存后自动生效（≤1 秒）");
-    } catch (err) {
-        UI.soterToggle.checked = !want;
-        applySoterUI(!want);
-        console.error("写入 SOTER 开关失败:", err);
-        showToast("SOTER 开关写入失败：" + Backend.reason(err));
-    } finally {
-        UI.soterToggle.disabled = false;
-    }
-}
-
-async function onSoterCertsToggle() {
-    const want = UI.soterCertsToggle.checked;
-    soterCertsPollToken += 1;
-    const token = soterCertsPollToken;
-    UI.soterCertsToggle.disabled = true;
-    UI.soterCertsSub.textContent = want ? "已开启：身份生成中…" : "关闭（默认关闭）";
-    UI.soterCertsHint.textContent = want ? SOTER_CERTS_HINT_ON : SOTER_CERTS_HINT_OFF;
-    try {
-        const r = await RequestApi.setSoterCerts(want);
-        if (!isOk(r)) throw new Error(String(r));
-        clearFailure("soter_certs");
-        showToast(want ? "已开启 SOTER 证书链，≤1 秒生效"
-                       : "已关闭 SOTER 证书链，回到旧版行为（无 certs）");
-        await pollSoterCerts(token, 8);   /* 立即读一次，未 ready 时继续有上限地轮询 */
-        /* 写已经成功；即使随后的读失败，也不能把开关永久锁死。 */
-        UI.soterCertsToggle.disabled = false;
-    } catch (err) {
-        console.error("写入 SOTER 证书链开关失败:", err);
-        showToast("SOTER 证书链开关写入失败：" + Backend.reason(err));
-        await loadSoterCerts();           /* 回到后端真实状态，不保留乐观勾选 */
-    }
-}
-
-async function onApplyKeybox() {
-    const id = UI.keyboxSelect.value;
-    if (!id) return;
-    setBusy(UI.keyboxApply, true, "切换中…");
-    try {
-        const r = await RequestApi.setKeybox(id);
-        if (!isOk(r)) throw new Error(String(r));
-        await loadKeyboxes();
-        await loadVersionInfo();
-        showToast("KeyBox 已切换，下一次证书请求即生效");
-    } catch (err) {
-        console.error("切换 KeyBox 失败:", err);
-        showToast("KeyBox 切换失败：" + Backend.reason(err));
-    } finally {
-        setBusy(UI.keyboxApply, false);
-    }
-}
-
-async function onApplyPatch() {
-    let value = "auto";
-    if (patchMode === "fixed") {
-        value = (UI.patchDate.value || "").trim();
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-            showToast("请先选择有效日期");
-            return;
-        }
-    }
-    setBusy(UI.patchApply, true, "应用中…");
-    try {
-        const r = await RequestApi.setSecurityPatch(value);
-        if (!isOk(r)) throw new Error(String(r));
-        await loadSecurityPatch();
-        showToast(patchMode === "fixed" ? "已固定安全补丁日期" : "已改为自动跟随设备");
-    } catch (err) {
-        console.error("写入安全补丁配置失败:", err);
-        showToast("安全补丁配置写入失败：" + Backend.reason(err));
-    } finally {
-        setBusy(UI.patchApply, false);
-    }
-}
-
-/* --------------------------- 证书（keybox）自动更新 --------------------------- */
-
-/* 后端 last_result 的失败原因 -> 中文说明（未知原因原样显示） */
-const KBUPD_REASON_TEXT = {
-    bad_url: "更新源地址无效",
-    download_failed: "下载失败（curl / wget 均不可用或网络错误）",
-    empty_download: "下载内容为空",
-    invalid_keybox: "内容不是合法 keybox",
-    not_xml: "内容不是 keybox XML",
-    empty: "内容为空",
-    too_large: "文件过大",
-    no_attestation: "缺少 AndroidAttestation 节点",
-    no_key: "缺少 Key 节点",
-    no_private_key: "缺少 PrivateKey 节点",
-    no_cert_chain: "缺少 CertificateChain 节点",
-    no_pem_cert: "没有 PEM 证书",
-    bad_cert_der: "证书无法解码",
-    write_tmp_failed: "写入临时文件失败",
-    replace_failed: "替换 keybox.xml 失败",
-    bad_custom_url: "自定义 URL 无效",
-    unknown_source: "未知更新源",
-    bad_interval: "间隔参数无效",
-    save_failed: "配置保存失败",
-};
-
-function kbupdReasonText(result) {
-    if (!result || result === "never") return "—";
-    if (result === "ok") return "成功";
-    const raw = String(result).replace(/^fail:/, "");
-    /* 形如 invalid_keybox:no_key / download_failed(curl=22) */
-    const head = raw.split("(")[0].split(":")[0];
-    const detail = raw.includes(":") ? raw.split(":")[1] : "";
-    const base = KBUPD_REASON_TEXT[head] || raw;
-    return detail ? `失败 · ${base}（${detail}）` : `失败 · ${base}`;
-}
-
-function formatEpochText(sec) {
-    const n = Number(sec);
-    if (!n || n <= 0) return "";
-    const d = new Date(n * 1000);
-    const pad = (v) => String(v).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-async function loadKeyboxUpdate() {
-    const card = kbupdCard();
-    const readonly = readOnlyReason("kbu", "证书自动更新", "kbu_status");
-    if (readonly) {
-        UI.kbupdTag.textContent = "KSU 不支持";
-        UI.kbupdTag.classList.remove("is-on");
-        UI.kbupdSub.textContent = readonly;
-        [UI.kbupdToggle, UI.kbupdSource, UI.kbupdCustomUrl, UI.kbupdInterval,
-            UI.kbupdSave, UI.kbupdNow].forEach((control) => { control.disabled = true; });
-        PanelStatus.show(card, readonly, { readonly: true });
-        return;
-    }
-    try {
-        const data = await RequestApi.keyboxUpdateStatus();
-        renderKeyboxUpdate(data);
-        [UI.kbupdToggle, UI.kbupdSource, UI.kbupdCustomUrl, UI.kbupdInterval,
-            UI.kbupdSave, UI.kbupdNow].forEach((control) => { control.disabled = false; });
-        clearFailure("kbu");
-        PanelStatus.clear(card);
-    } catch (err) {
-        const described = Backend.describe(err);
-        noteFailure("kbu", "证书自动更新", err);
-        UI.kbupdTag.textContent = tagText(described.level);
-        UI.kbupdTag.classList.remove("is-on");
-        UI.kbupdSub.textContent = described.text;
-        [UI.kbupdToggle, UI.kbupdSource, UI.kbupdCustomUrl, UI.kbupdInterval,
-            UI.kbupdSave, UI.kbupdNow].forEach((control) => { control.disabled = true; });
-        PanelStatus.show(card, described.text, panelOptions(described, loadKeyboxUpdate));
-    }
-}
-
-function renderKeyboxUpdate(data) {
-    if (!data) return;
-    const sources = data.sources || [];
-    const select = UI.kbupdSource;
-    const ids = sources.map((s) => s.id).join(",");
-    /* 只在源列表变化时重建 option，避免每次刷新都丢失选择 */
-    if (select.dataset.ids !== ids) {
-        select.innerHTML = "";
-        sources.forEach((s) => {
-            const opt = document.createElement("option");
-            opt.value = s.id;
-            opt.textContent = s.name;
-            if (s.url) opt.title = s.url;
-            select.appendChild(opt);
-        });
-        select.dataset.ids = ids;
-    }
-    if (data.source) select.value = data.source;
-
-    UI.kbupdToggle.checked = !!data.enabled;
-    /* 输入框正在编辑时不要被后台刷新覆盖 */
-    if (document.activeElement !== UI.kbupdInterval) {
-        UI.kbupdInterval.value = String(data.intervalHours === undefined ? 24 : data.intervalHours);
-    }
-    if (document.activeElement !== UI.kbupdCustomUrl) {
-        UI.kbupdCustomUrl.value = data.customUrl || "";
-    }
-    applyKeyboxUpdateUI(data);
-}
-
-function applyKeyboxUpdateUI(data) {
-    const enabled = !!data.enabled;
-    const interval = Number(data.intervalHours || 0);
-    const sourceName = data.sourceName || data.source || "—";
-
-    UI.kbupdTag.textContent = enabled ? "已启用" : "未启用";
-    UI.kbupdTag.classList.toggle("is-on", enabled);
-    UI.kbupdTag.classList.toggle("tag-outline", !enabled);
-
-    UI.kbupdSub.textContent = enabled
-        ? (interval > 0 ? `每 ${interval} 小时检查一次 · 源 ${sourceName}` : `每次开机检查 · 源 ${sourceName}`)
-        : "未启用 · 仅手动更新";
-
-    UI.kbupdCustomRow.classList.toggle("is-visible", data.source === "custom");
-
-    UI.kbupdLast.textContent = data.lastCheckEpoch ? formatEpochText(data.lastCheckEpoch) : "从未";
-    UI.kbupdResult.textContent = kbupdReasonText(data.lastResult);
-    UI.kbupdResult.classList.toggle("is-error", String(data.lastResult || "").indexOf("fail:") === 0);
-    UI.kbupdNext.textContent = !enabled
-        ? "—"
-        : (interval > 0 && data.nextEpoch ? formatEpochText(data.nextEpoch) : "下次开机");
-    UI.kbupdUrl.textContent = data.effectiveUrl || "—";
-}
-
-function keyboxUpdatePayload() {
-    return {
-        enabled: !!UI.kbupdToggle.checked,
-        source: UI.kbupdSource.value,
-        customUrl: (UI.kbupdCustomUrl.value || "").trim(),
-        intervalHours: Number(String(UI.kbupdInterval.value || "0").trim()),
-    };
-}
-
-function validateKeyboxUpdatePayload(payload) {
-    if (!Number.isInteger(payload.intervalHours) || payload.intervalHours < 0 || payload.intervalHours > 8760) {
-        showToast("间隔需为 0–8760 之间的整数小时");
-        return false;
-    }
-    if (payload.source === "custom" && !/^https?:\/\/.+/i.test(payload.customUrl)) {
-        showToast("请填写有效的 http(s) URL");
-        return false;
+        if (token !== target.token) return false;
+        if (options && options.quiet && target.status === "ready") return false;
+        target.status = "error";
+        target.err = err;
+        console.warn("[panel]", err && err.message);
     }
     return true;
 }
 
-async function saveKeyboxUpdate(payload, okMsg) {
-    const r = await RequestApi.keyboxUpdateConfig(payload);
-    if (!isOk(r)) throw new Error(String(r).replace(/^FAILED:/, ""));
-    await loadKeyboxUpdate();
-    showToast(okMsg);
-}
+/* The status bar under a card's heading: one reason, and a retry button when retrying
+   can help. spec is null, or { text, info, retryKey, onRetry }. */
+const PanelBar = (() => {
+    const bars = new WeakMap();
 
-async function onToggleKeyboxUpdate() {
-    const want = UI.kbupdToggle.checked;
-    const payload = keyboxUpdatePayload();
-    if (!validateKeyboxUpdatePayload(payload)) {
-        UI.kbupdToggle.checked = !want;
+    function bar(card) {
+        if (bars.has(card)) return bars.get(card);
+        const wrap = document.createElement("div");
+        wrap.className = "panel-status";
+        wrap.hidden = true;
+        const label = document.createElement("span");
+        label.className = "panel-status-text";
+        const retry = document.createElement("button");
+        retry.type = "button";
+        retry.className = "btn btn-small";
+        wrap.appendChild(label);
+        wrap.appendChild(retry);
+        const head = card.querySelector(".card-head") || card.querySelector("summary");
+        if (head) head.insertAdjacentElement("afterend", wrap);
+        else card.insertBefore(wrap, card.firstChild);
+        const entry = { wrap: wrap, label: label, retry: retry };
+        bars.set(card, entry);
+        return entry;
+    }
+
+    function show(card, spec) {
+        if (!spec) {
+            if (bars.has(card)) bars.get(card).wrap.hidden = true;
+            return;
+        }
+        const entry = bar(card);
+        entry.label.textContent = spec.text;
+        entry.wrap.classList.toggle("is-info", !!spec.info);
+        entry.wrap.hidden = false;
+        entry.retry.hidden = typeof spec.onRetry !== "function";
+        entry.retry.textContent = spec.retryKey ? t(spec.retryKey) : "";
+        entry.retry.onclick = typeof spec.onRetry === "function" ? spec.onRetry : null;
+    }
+
+    return { show };
+})();
+
+/* A bar for whatever failed in these slots: nothing to retry when the backend says it
+   cannot; a fresh module probe first when the backend itself is missing. */
+function problemBar(card, slots, reload) {
+    const errors = slots.filter((item) => item.status === "error").map((item) => item.err);
+    if (!errors.length) {
+        PanelBar.show(card, null);
         return;
     }
-    UI.kbupdToggle.disabled = true;
-    try {
-        await saveKeyboxUpdate(payload, want ? "已启用证书自动更新" : "已关闭证书自动更新");
-    } catch (err) {
-        UI.kbupdToggle.checked = !want;
-        console.error("写入证书自动更新开关失败:", err);
-        showToast("证书自动更新开关写入失败");
-    } finally {
-        UI.kbupdToggle.disabled = false;
+    const described = errors.map(describeError);
+    const texts = described.map((item) => item.text).filter((text, i, all) => all.indexOf(text) === i);
+    const levels = described.map((item) => item.level);
+    if (levels.indexOf("failed") >= 0) {
+        PanelBar.show(card, { text: texts.join(" · "), retryKey: "common.retry", onRetry: reload });
+    } else if (levels.indexOf("unavailable") >= 0) {
+        PanelBar.show(card, {
+            text: texts.join(" · "),
+            retryKey: "common.redetect",
+            onRetry: () => { Backend.reset(); reload(); },
+        });
+    } else {
+        PanelBar.show(card, { text: texts.join(" · "), info: true });
     }
 }
 
-async function onSaveKeyboxUpdate() {
-    const payload = keyboxUpdatePayload();
-    if (!validateKeyboxUpdatePayload(payload)) return;
-    setBusy(UI.kbupdSave, true, "保存中…");
+/* Writes one switch. On failure the switch goes back and the toast says why. */
+async function writeSwitch(input, target, write, failKey) {
+    const want = input.checked;
+    input.disabled = true;
+    target.saving = true;
+    target.token += 1;
     try {
-        await saveKeyboxUpdate(payload, "证书更新配置已保存");
+        const reply = await write(want);
+        if (!isOk(reply)) throw backendError("backend", String(reply));
+        target.status = "ready";
+        target.data = want;
+        target.err = null;
+        return true;
     } catch (err) {
-        console.error("保存证书更新配置失败:", err);
-        showToast("证书更新配置保存失败：" + Backend.reason(err));
+        input.checked = !want;
+        console.warn("[write]", err && err.message);
+        showToast(t(failKey, { reason: errorText(err) }), true);
+        return false;
     } finally {
-        setBusy(UI.kbupdSave, false);
+        target.saving = false;
     }
 }
 
-async function onUpdateKeyboxNow() {
-    setBusy(UI.kbupdNow, true, "更新中…");
+/* ------------------------------- page status ------------------------------ */
+
+function renderStatus() {
+    const stateEl = $("page-state");
+    const detail = $("page-detail");
+    if (pageLoading) {
+        stateEl.textContent = t("status.loading");
+        detail.hidden = true;
+        return;
+    }
+    const panels = [
+        [state.info, "about.versionPanel"], [state.soter, "soter.title"], [state.certs, "soter.certsPanel"],
+        [state.keybox, "keybox.title"], [state.kbu, "kbu.title"], [state.hideBl, "system.hideBl"],
+        [state.autoTarget, "system.auto"], [state.patch, "patch.title"], [state.debug, "diag.debug"],
+        [state.takeover, "exp.takeover"], [ScopeCard.problem(), "scope.title"],
+    ];
+    const failed = [];
+    const readonly = [];
+    panels.forEach((entry) => {
+        if (entry[0].status !== "error") return;
+        const level = Backend.describe(entry[0].err).level;
+        (level === "unsupported" ? readonly : failed).push(t(entry[1]));
+    });
+    const separator = t("status.separator");
+    if (failed.length) {
+        stateEl.textContent = t("status.failed", { count: failed.length });
+        detail.textContent = t("status.detailFailed", { items: failed.join(separator) });
+        detail.classList.remove("is-info");
+        detail.hidden = false;
+    } else if (readonly.length) {
+        stateEl.textContent = t("status.readonly", { count: readonly.length });
+        detail.textContent = t("status.detailReadonly", { items: readonly.join(separator) });
+        detail.classList.add("is-info");
+        detail.hidden = false;
+    } else {
+        stateEl.textContent = t("status.ready");
+        detail.hidden = true;
+    }
+}
+
+function renderBackend() {
+    const ksu = Backend.isKsu();
+    const chip = $("backend-mode");
+    chip.textContent = t(ksu ? "backend.ksu" : "backend.ultra");
+    chip.title = t(ksu ? "backend.ksuHint" : "backend.ultraHint");
+    setText($("ver-backend"), chip.textContent);
+}
+
+/* -------------------------------- about ----------------------------------- */
+
+async function loadVersionInfo() {
+    await read(state.info, () => RequestApi.getVersionInfo());
+    renderInfo();
+    renderKbu();
+}
+
+function renderInfo() {
+    const s = state.info;
+    const data = s.status === "ready" ? s.data : {};
+    $("module-version").textContent = s.status === "error" ? t("common.readFailed") : (data.version || "");
+    setText($("ver-version"), data.version);
+    setText($("ver-author"), data.author);
+    setText($("ver-dex"), data.dex_short);
+    setText($("ver-keybox"), data.keybox_short);
+    setText($("ver-build"), data.build);
+    problemBar($("about-card"), [s], async () => {
+        await loadVersionInfo();
+        if (state.kbu.status === "idle" || state.kbu.status === "error") loadKbu();
+        renderStatus();
+    });
+}
+
+/* ---------------------------------- SOTER ---------------------------------- */
+
+async function loadSoterCard() {
+    await Promise.all([loadSoter(), loadCerts()]);
+}
+
+async function loadSoter() {
+    await read(state.soter, async () => {
+        requireSupport("get soter");
+        return String(await RequestApi.getSoterToggle()).trim() === "1";
+    });
+    renderSoter();
+}
+
+async function loadCerts() {
+    const fresh = await read(state.certs, () => {
+        requireSupport("get soter_certs");
+        return RequestApi.getSoterCerts();
+    });
+    renderSoter();
+    if (fresh && certsPending()) pollCerts(CERTS_POLL_ATTEMPTS);
+}
+
+const certsPending = () => {
+    const s = state.certs;
+    return s.status === "ready" && s.data.enabled && s.data.identity !== "ready";
+};
+
+/* The daemon generates the identity some time after the switch is written, so this
+   keeps looking for a while instead of assuming it is ready. */
+function pollCerts(attempts) {
+    state.certs.pollToken += 1;
+    const pollToken = state.certs.pollToken;
+    const step = async (left) => {
+        if (pollToken !== state.certs.pollToken || left <= 0) return;
+        await read(state.certs, () => RequestApi.getSoterCerts(), { quiet: true });
+        if (pollToken !== state.certs.pollToken) return;
+        renderSoter();
+        if (certsPending()) setTimeout(() => step(left - 1), CERTS_POLL_MS);
+    };
+    setTimeout(() => step(attempts), CERTS_POLL_MS);
+}
+
+function renderSoter() {
+    const s = state.soter;
+    const toggle = $("toggle-soter");
+    const chip = $("soter-chip");
+    if (s.status === "ready") {
+        toggle.checked = !!s.data;
+        toggle.disabled = s.saving;
+        setChip(chip, s.data ? "on" : null, t(s.data ? "common.on" : "common.off"));
+        $("soter-sub").textContent = t(s.data ? "soter.subOn" : "soter.subOff");
+    } else {
+        toggle.disabled = true;
+        if (s.status === "error") setErrorChip(chip, s.err);
+        else setChip(chip, null, "");
+        $("soter-sub").textContent = s.status === "error" ? DASH : t("common.loading");
+    }
+
+    const c = state.certs;
+    const certsToggle = $("toggle-soter-certs");
+    const certsSub = $("soter-certs-sub");
+    const certsHint = $("soter-certs-hint");
+    if (c.status === "ready") {
+        const enabled = !!c.data.enabled;
+        certsToggle.checked = enabled;
+        certsToggle.disabled = c.saving;
+        if (!enabled) certsSub.textContent = t("soter.certsOff");
+        else if (c.data.identity === "ready") certsSub.textContent = t("soter.certsReady", { count: Number(c.data.certs) || 0 });
+        else certsSub.textContent = t("soter.certsPending");
+        certsHint.textContent = t(enabled ? "soter.certsHintOn" : "soter.certsHintOff");
+    } else {
+        certsToggle.disabled = true;
+        certsSub.textContent = c.status === "error" ? DASH : t("common.loading");
+        certsHint.textContent = "";
+    }
+    certsHint.hidden = !certsHint.textContent;
+    problemBar($("soter-card"), [s, c], loadSoterCard);
+}
+
+async function onSoterToggle() {
+    const input = $("toggle-soter");
+    const want = input.checked;
+    const saved = await writeSwitch(input, state.soter, RequestApi.setSoterToggle, "soter.saveFailed");
+    if (saved) showToast(t(want ? "soter.toastOn" : "soter.toastOff"));
+    renderSoter();
+}
+
+async function onCertsToggle() {
+    const input = $("toggle-soter-certs");
+    const want = input.checked;
+    const c = state.certs;
+    c.pollToken += 1;
+    c.token += 1;
+    c.saving = true;
+    input.disabled = true;
+    c.status = "ready";
+    c.data = { enabled: want, identity: "missing", certs: 0 };
+    renderSoter();
     try {
-        const data = await RequestApi.keyboxUpdateNow();
-        if (data && data.status) renderKeyboxUpdate(data.status);
-        if (data && data.ok) {
-            await loadKeyboxes();
-            await loadVersionInfo();
-            showToast("证书已更新，下一次证书请求即生效");
+        const reply = await RequestApi.setSoterCerts(want);
+        if (!isOk(reply)) throw backendError("backend", String(reply));
+        c.saving = false;
+        showToast(t(want ? "soter.certsToastOn" : "soter.certsToastOff"));
+        await loadCerts();
+    } catch (err) {
+        c.saving = false;
+        showToast(t("soter.certsSaveFailed", { reason: errorText(err) }), true);
+        await loadCerts();
+    }
+}
+
+/* --------------------------------- KeyBox ---------------------------------- */
+
+async function loadKeyboxes(options) {
+    await read(state.keybox, () => {
+        requireSupport("keyboxes");
+        return RequestApi.listKeyboxes();
+    }, options);
+    renderKeybox();
+}
+
+function keyboxActiveName(data) {
+    if (!data.installed || data.active_id === "none") return t("keybox.nameNone");
+    if (data.active_id === "custom") return t("keybox.nameCustom");
+    return data.active_name || data.current_name || t("common.unknown");
+}
+
+function keyboxOptions(data) {
+    const available = data.items.filter((item) => item.available !== false);
+    if (available.length) {
+        return available.map((item) => ({
+            value: item.id,
+            label: item.sha_short && item.sha_short !== "unknown" ? item.name + " · " + item.sha_short : item.name,
+        }));
+    }
+    return [{ value: "", label: t(data.installed ? "keybox.customOption" : "keybox.noneOption") }];
+}
+
+/* Rebuilt only when the list really changed: the background poll must not throw away
+   what the user has picked but not applied yet, or close an open menu. */
+function renderKeyboxSelect(data) {
+    const select = $("keybox-select");
+    const s = state.keybox;
+    const options = keyboxOptions(data);
+    const key = JSON.stringify(options);
+    if (key !== s.optionsKey && document.activeElement !== select) {
+        s.optionsKey = key;
+        while (select.firstChild) select.removeChild(select.firstChild);
+        options.forEach((option) => {
+            const node = document.createElement("option");
+            node.value = option.value;
+            node.textContent = option.label;
+            select.appendChild(node);
+        });
+    }
+    const values = options.map((option) => option.value);
+    if (s.pick !== null && values.indexOf(s.pick) >= 0) select.value = s.pick;
+    else if (values.indexOf(data.current) >= 0) select.value = data.current;
+    return values.some((value) => value.length > 0);
+}
+
+function renderKeybox() {
+    const s = state.keybox;
+    const chip = $("keybox-chip");
+    const select = $("keybox-select");
+    const apply = $("btn-apply-keybox");
+    const banner = $("keybox-warning");
+    if (s.status === "ready") {
+        const data = s.data;
+        const canSwitch = renderKeyboxSelect(data);
+        setText($("keybox-active"), keyboxActiveName(data));
+        setText($("keybox-sha"), data.active_sha_short && data.active_sha_short !== "unknown" && data.active_sha_short !== DASH
+            ? data.active_sha_short : "");
+        if (!data.installed) setChip(chip, "warn", t("keybox.chipNone"));
+        else if (data.active_id === "custom") setChip(chip, null, t("keybox.chipCustom"));
+        else setChip(chip, "on", t("keybox.chipActive"));
+        select.disabled = !canSwitch || s.applying;
+        setEnabled(apply, canSwitch && !s.applying);
+
+        banner.hidden = !!data.installed;
+        $("keybox-warning-body").textContent = t("keybox.warnBody", { path: KEYBOX_PATH });
+        if (!data.installed) {
+            let text = t("keybox.probeMissing", { path: KEYBOX_PATH });
+            if (data.probe.exists && !data.probe.size) text = t("keybox.probeEmpty");
+            else if (data.probe.exists) text = t("keybox.probeUnreadable");
+            PanelBar.show($("keybox-card"), { text: text, info: true });
+        } else if (!canSwitch) {
+            PanelBar.show($("keybox-card"), { text: t("keybox.customLocked"), info: true });
         } else {
-            const reason = (data && data.reason) || "unknown";
-            showToast("更新失败：" + kbupdReasonText("fail:" + reason).replace(/^失败 · /, ""));
+            PanelBar.show($("keybox-card"), null);
+        }
+        return;
+    }
+    /* A failed read says nothing about whether a keybox is installed, so the banner that
+       claims the module is inactive only follows a real answer from the backend. */
+    banner.hidden = true;
+    setText($("keybox-active"), "");
+    setText($("keybox-sha"), "");
+    select.disabled = true;
+    apply.disabled = true;
+    if (s.status === "error") setErrorChip(chip, s.err);
+    else setChip(chip, null, "");
+    problemBar($("keybox-card"), [s], () => { loadKeyboxes().then(renderStatus); });
+}
+
+async function onApplyKeybox() {
+    const s = state.keybox;
+    const id = $("keybox-select").value;
+    if (!id || s.applying) return;
+    s.applying = true;
+    setBusy($("btn-apply-keybox"), "keybox.switching");
+    renderKeybox();
+    s.token += 1;
+    try {
+        const reply = await RequestApi.setKeybox(id);
+        if (!isOk(reply)) throw backendError("backend", String(reply));
+        s.pick = null;
+        await Promise.all([loadKeyboxes(), loadVersionInfo()]);
+        showToast(t("keybox.switched"));
+    } catch (err) {
+        console.warn("[keybox]", err && err.message);
+        showToast(t("keybox.switchFailed", { reason: errorText(err) }), true);
+    } finally {
+        s.applying = false;
+        setBusy($("btn-apply-keybox"), null);
+        renderKeybox();
+    }
+}
+
+/* A keybox can be added or replaced outside this page, so look again while the page is
+   visible. The loop always reschedules itself; a hidden page just skips its turn. */
+function startKeyboxPoll() {
+    const poll = async () => {
+        if (!document.hidden && !pageLoading && !state.keybox.applying) {
+            await loadKeyboxes({ quiet: true });
+            renderStatus();
+        }
+        setTimeout(poll, KEYBOX_POLL_MS);
+    };
+    setTimeout(poll, KEYBOX_POLL_MS);
+    document.addEventListener("visibilitychange", () => {
+        if (!document.hidden && !pageLoading && !state.keybox.applying) loadKeyboxes({ quiet: true });
+    });
+}
+
+/* --------------------------- certificate auto-update ----------------------- */
+
+function kbuAvailable() {
+    const info = state.info;
+    if (info.status !== "ready") return false;
+    const version = /^(\d+)\.(\d+)\.(\d+)/.exec(String(info.data.version || ""));
+    if (!version) return false;
+    const major = Number(version[1]);
+    const minor = Number(version[2]);
+    return major > 6 || (major === 6 && (minor > 0 || Number(version[3]) >= 5));
+}
+
+async function loadKbu() {
+    if (!kbuAvailable()) {
+        state.kbu.status = "idle";
+        renderKbu();
+        return;
+    }
+    const fresh = await read(state.kbu, () => {
+        requireSupport("kbu_status");
+        return RequestApi.keyboxUpdateStatus();
+    });
+    if (fresh && state.kbu.status === "ready") syncKbuInputs(state.kbu.data);
+    renderKbu();
+}
+
+function kbuSourceName(source) {
+    if (source.id === "custom") return t("kbu.sourceCustom");
+    return source.name || source.id;
+}
+
+/* Fields being edited are left alone. */
+function syncKbuInputs(data) {
+    const interval = $("kbu-interval");
+    const url = $("kbu-custom-url");
+    if (document.activeElement !== interval) interval.value = String(data.intervalHours);
+    if (document.activeElement !== url) url.value = data.customUrl || "";
+    renderKbuSources(data);
+    $("kbu-source").value = data.source;
+}
+
+function renderKbuSources(data) {
+    const select = $("kbu-source");
+    const keep = select.value;
+    while (select.firstChild) select.removeChild(select.firstChild);
+    data.sources.forEach((source) => {
+        const option = document.createElement("option");
+        option.value = source.id;
+        option.textContent = kbuSourceName(source);
+        if (source.url) option.title = source.url;
+        select.appendChild(option);
+    });
+    if (keep) select.value = keep;
+}
+
+function kbuResultText(result) {
+    if (!result || result === "never") return DASH;
+    if (result === "ok") return t("kbu.ok");
+    const raw = String(result).replace(/^fail:/, "");
+    return t("kbu.failed", { reason: tokenText(raw) || raw });
+}
+
+function renderKbu() {
+    const card = $("kbu-card");
+    const s = state.kbu;
+    card.hidden = !kbuAvailable();
+    if (card.hidden) return;
+    const chip = $("kbu-chip");
+    const controls = [$("toggle-kbu"), $("kbu-source"), $("kbu-custom-url"), $("kbu-interval"), $("btn-kbu-save"), $("btn-kbu-now")];
+    const ksu = Backend.isKsu();
+    $("kbu-interval").min = ksu ? "1" : "0";
+    $("kbu-hint").textContent = t(ksu ? "kbu.hintKsu" : "kbu.hintUltra");
+    if (s.status !== "ready") {
+        controls.forEach((control) => { control.disabled = true; });
+        if (s.status === "error") setErrorChip(chip, s.err);
+        else setChip(chip, null, "");
+        $("kbu-sub").textContent = s.status === "error" ? DASH : t("common.loading");
+        ["kbu-last", "kbu-result", "kbu-next", "kbu-url"].forEach((id) => setText($(id), ""));
+        $("kbu-zero-warn").hidden = true;
+        $("kbu-custom-row").hidden = true;
+        problemBar(card, [s], () => { loadKbu().then(renderStatus); });
+        return;
+    }
+    const data = s.data;
+    const enabled = !!data.enabled;
+    const interval = Number(data.intervalHours) || 0;
+    const known = data.sources.filter((source) => source.id === data.source)[0];
+    const sourceName = known ? kbuSourceName(known) : (data.sourceName || data.source || DASH);
+    renderKbuSources(data);
+    controls.forEach((control) => setEnabled(control, !s.saving));
+    $("toggle-kbu").checked = enabled;
+    setChip(chip, enabled ? "on" : null, t(enabled ? "kbu.chipOn" : "kbu.chipOff"));
+    if (!enabled) $("kbu-sub").textContent = t("kbu.subOff");
+    else if (interval > 0) $("kbu-sub").textContent = t("kbu.subHours", { count: interval, source: sourceName });
+    else $("kbu-sub").textContent = t("kbu.subBoot", { source: sourceName });
+    $("kbu-zero-warn").hidden = !(ksu && enabled && interval === 0);
+    $("kbu-custom-row").hidden = $("kbu-source").value !== "custom";
+    setText($("kbu-last"), data.lastCheckEpoch ? TEEI18N.date(data.lastCheckEpoch) : t("kbu.never"));
+    setText($("kbu-result"), kbuResultText(data.lastResult));
+    $("kbu-result").classList.toggle("text-err", String(data.lastResult || "").indexOf("fail:") === 0);
+    setText($("kbu-next"), !enabled ? "" : (interval > 0 && data.nextEpoch ? TEEI18N.date(data.nextEpoch) : t("kbu.nextBoot")));
+    setText($("kbu-url"), data.effectiveUrl);
+    PanelBar.show(card, null);
+}
+
+function kbuDraft() {
+    return {
+        enabled: !!$("toggle-kbu").checked,
+        source: $("kbu-source").value,
+        customUrl: ($("kbu-custom-url").value || "").trim(),
+        intervalHours: Number(String($("kbu-interval").value || "").trim() || "NaN"),
+    };
+}
+
+/* webui.sh treats an interval of 0 as "due on every tick" and downloads again every 30 s
+   instead of once per boot, so 0 is only offered on the backend where it means boot. */
+function kbuPayloadProblem(payload) {
+    const ksu = Backend.isKsu();
+    const min = ksu ? 1 : 0;
+    if (!Number.isInteger(payload.intervalHours) || payload.intervalHours < min || payload.intervalHours > 8760) {
+        return t(ksu ? "kbu.badIntervalKsu" : "kbu.badIntervalUltra");
+    }
+    if (payload.source === "custom" && !/^https?:\/\/.+/i.test(payload.customUrl)) return t("kbu.badUrl");
+    return "";
+}
+
+async function saveKbu(payload) {
+    const s = state.kbu;
+    s.token += 1;
+    s.saving = true;
+    renderKbu();
+    try {
+        const reply = await RequestApi.keyboxUpdateConfig(payload);
+        if (!isOk(reply)) throw backendError("backend", String(reply));
+    } finally {
+        s.saving = false;
+    }
+    await loadKbu();
+}
+
+/* The switch only changes the switch: unsaved edits in the fields below stay unsaved. */
+async function onKbuToggle() {
+    const input = $("toggle-kbu");
+    const want = input.checked;
+    const saved = state.kbu.data;
+    const payload = { enabled: want, source: saved.source, customUrl: saved.customUrl, intervalHours: saved.intervalHours };
+    if (want) {
+        const problem = kbuPayloadProblem(payload);
+        if (problem) {
+            input.checked = !want;
+            showToast(problem, true);
+            return;
+        }
+    }
+    try {
+        await saveKbu(payload);
+        showToast(t(want ? "kbu.enabledToast" : "kbu.disabledToast"));
+    } catch (err) {
+        input.checked = !want;
+        renderKbu();
+        showToast(t("kbu.toggleFailed", { reason: errorText(err) }), true);
+    }
+}
+
+async function onKbuSave() {
+    const payload = kbuDraft();
+    const problem = kbuPayloadProblem(payload);
+    if (problem) {
+        showToast(problem, true);
+        return;
+    }
+    const button = $("btn-kbu-save");
+    setBusy(button, "common.saving");
+    try {
+        await saveKbu(payload);
+        showToast(t("kbu.savedToast"));
+    } catch (err) {
+        renderKbu();
+        showToast(t("kbu.saveFailed", { reason: errorText(err) }), true);
+    } finally {
+        setBusy(button, null);
+        renderKbu();
+    }
+}
+
+async function onKbuNow() {
+    const button = $("btn-kbu-now");
+    setBusy(button, "kbu.updating");
+    state.kbu.token += 1;
+    try {
+        const result = await RequestApi.keyboxUpdateNow();
+        if (result.status) {
+            state.kbu.status = "ready";
+            state.kbu.data = result.status;
+            state.kbu.err = null;
+        }
+        if (result.ok) {
+            await Promise.all([loadKeyboxes(), loadVersionInfo()]);
+            showToast(t("kbu.updatedToast"));
+        } else {
+            showToast(t("kbu.updateFailed", { reason: tokenText(result.reason) || result.reason || t("err.unknown") }), true);
         }
     } catch (err) {
-        console.error("立即更新证书失败:", err);
-        showToast("立即更新请求失败：" + Backend.reason(err));
+        console.warn("[kbu]", err && err.message);
+        showToast(t("kbu.updateFailed", { reason: errorText(err) }), true);
     } finally {
-        setBusy(UI.kbupdNow, false);
+        setBusy(button, null);
+        renderKbu();
     }
 }
 
-/* --------------------------- Soter 接管范围 --------------------------- */
+/* ------------------------------ Soter scope -------------------------------- */
 
-/* 双后端说明（本文件不再自带一套 ksu.exec）：
- *   Ultra（Pro 原生模块）：WebUI 由模块 .so 的 HTTP 服务提供 → POST /soterScope*。
- *   KSU/Lite（脚本模块） ：`sh $MODDIR/core/webui.sh scope list|set|setall`；
- *     webui.sh 缺失或明确回 unsupported 时，回退到改动前就在用的
- *     `app_process ... mpl.ScopeCli <cmd>`（模块根探测与 CLI 解析都在 request.js 的
- *     ModuleRoot / ScopeCli 里，是原来的实现，没有重写）。
- *   两条分支返回同一份 JSON（packages / selected / defaultAll），UI 不区分模式。
- * 页面只通过 RequestApi.soterScope() / soterScopeSet() 访问，不再有本地 api()。 */
-
-/* 卡片：列表 / 搜索 / 全选反选清空 / 保存 / 恢复全放行。
- * 几百个应用也要流畅：DOM 只建一次（DocumentFragment 批量插入），
- * 过滤只切 class，不重建 innerHTML。 */
+/* Hundreds of apps stay smooth: the rows are built once and filtering only toggles a
+   class. Selections that have not been saved survive a refresh. */
 const ScopeCard = (() => {
-    const state = {
+    const s = {
         items: [], byPkg: new Map(), total: 0, selected: 0, visible: 0,
-        defaultAll: false, filter: "", busy: false, loading: false,
-        loaded: false, error: null, readonly: false,
+        defaultAll: false, filter: "", busy: false, loading: false, loaded: false,
+        err: null, dirty: false, problem: { status: "loading", err: null },
     };
-    const collator = (typeof Intl !== "undefined" && Intl.Collator)
-        ? new Intl.Collator("zh-Hans-CN", { sensitivity: "base", numeric: true })
-        : null;
     let filterTimer = 0;
+    let collator = null;
 
-    function compareLabel(a, b) {
+    const list = () => $("scope-list");
+
+    function clear(el) {
+        while (el.firstChild) el.removeChild(el.firstChild);
+    }
+
+    function compare(a, b) {
         const left = a.label || a.pkg;
         const right = b.label || b.pkg;
-        if (collator) {
-            const result = collator.compare(left, right);
-            if (result !== 0) return result;
-        } else if (left !== right) {
-            return left < right ? -1 : 1;
-        }
+        const result = collator ? collator.compare(left, right) : (left < right ? -1 : (left > right ? 1 : 0));
+        if (result !== 0) return result;
         return a.pkg < b.pkg ? -1 : (a.pkg > b.pkg ? 1 : 0);
-    }
-
-    function avatarColor(seed) {
-        const body = String(seed || "?");
-        let hash = 0;
-        for (let i = 0; i < body.length; i += 1) hash = (hash * 31 + body.charCodeAt(i)) % 360;
-        return "hsl(" + hash + ", 58%, 46%)";
     }
 
     function fallbackAvatar(item) {
         const span = document.createElement("span");
-        span.className = "scope-avatar scope-avatar-fallback";
-        const label = String(item.label || item.pkg || "?");
-        span.textContent = (label.trim().charAt(0) || "?").toUpperCase();
-        span.style.background = avatarColor(item.pkg);
+        span.className = "scope-avatar";
+        span.textContent = (String(item.label || item.pkg).trim().charAt(0) || "?").toUpperCase();
         return span;
     }
 
@@ -1010,14 +813,13 @@ const ScopeCard = (() => {
             avatar = document.createElement("img");
             avatar.className = "scope-avatar";
             avatar.alt = "";
-            avatar.width = 96;      /* CLI 给的 96px 源图，CSS 里按 48px 显示（2x 清晰） */
-            avatar.height = 96;
+            avatar.width = 36;
+            avatar.height = 36;
             avatar.loading = "lazy";
             avatar.decoding = "async";
             avatar.src = "data:image/png;base64," + item.icon;
             avatar.addEventListener("error", () => {
-                const fallback = fallbackAvatar(item);
-                if (avatar.parentNode) avatar.parentNode.replaceChild(fallback, avatar);
+                if (avatar.parentNode) avatar.parentNode.replaceChild(fallbackAvatar(item), avatar);
             }, { once: true });
         } else {
             avatar = fallbackAvatar(item);
@@ -1030,6 +832,7 @@ const ScopeCard = (() => {
         name.textContent = item.label || item.pkg;
         const meta = document.createElement("span");
         meta.className = "scope-meta";
+        meta.setAttribute("dir", "ltr");
         meta.textContent = item.pkg + " · uid " + item.uid;
         main.appendChild(name);
         main.appendChild(meta);
@@ -1038,7 +841,8 @@ const ScopeCard = (() => {
         check.type = "checkbox";
         check.className = "scope-check";
         check.checked = item.selected;
-        check.setAttribute("aria-label", (item.label || item.pkg) + " 是否接管");
+        check.disabled = item.uid <= 0;
+        check.setAttribute("aria-label", t("scope.checkAria", { app: item.label || item.pkg }));
 
         row.appendChild(avatar);
         row.appendChild(main);
@@ -1050,7 +854,7 @@ const ScopeCard = (() => {
 
     function renderSkeleton() {
         const frag = document.createDocumentFragment();
-        for (let i = 0; i < 6; i += 1) {
+        for (let i = 0; i < 4; i += 1) {
             const row = document.createElement("div");
             row.className = "scope-row is-skeleton";
             const avatar = document.createElement("span");
@@ -1067,118 +871,108 @@ const ScopeCard = (() => {
             row.appendChild(main);
             frag.appendChild(row);
         }
-        UI.scopeList.replaceChildren(frag);
+        clear(list());
+        list().appendChild(frag);
     }
 
-    function render() {
-        const scrollTop = UI.scopeList.scrollTop;
+    function renderRows() {
+        const el = list();
+        const scrollTop = el.scrollTop;
         const frag = document.createDocumentFragment();
-        state.items.forEach((item) => { frag.appendChild(item.el || buildRow(item)); });
-        UI.scopeList.replaceChildren(frag);
-        UI.scopeList.scrollTop = scrollTop;
-        applyFilter();
-        updateAlert();
-    }
-
-    function toggleEmpty() {
-        let message = "";
-        if (state.loaded && state.total === 0) message = "没有可接管的应用";
-        else if (state.loaded && state.visible === 0) message = "没有匹配的应用";
-        if (message) {
-            text(UI.scopeEmpty, message);
-            UI.scopeEmpty.hidden = false;
-        } else {
-            UI.scopeEmpty.hidden = true;
-        }
-    }
-
-    function updateCounts() {
-        const filtering = state.filter.trim().length > 0;
-        text(UI.scopeCount, filtering
-            ? state.selected + " / 共 " + state.total + " · 筛选 " + state.visible
-            : state.selected + " / 共 " + state.total);
-        const busy = state.busy || state.loading || state.readonly;
-        UI.scopeSave.disabled = busy || state.selected === 0;
-        UI.scopeRestore.disabled = busy;
-        UI.scopeNarrow.disabled = busy || state.selected === 0;
-        UI.scopeSelectAll.disabled = busy || state.visible === 0;
-        UI.scopeInvert.disabled = busy || state.visible === 0;
-        UI.scopeClear.disabled = busy || state.selected === 0;
-        UI.scopeSearch.disabled = !!state.readonly;
-    }
-
-    function updateAlert() {
-        UI.scopeAlert.hidden = !(state.loaded && state.defaultAll);
-        if (state.loaded && state.defaultAll) {
-            text(UI.scopeAlertText, "当前 = 全部应用接管（默认）");
-            text(UI.scopeNarrow, state.selected
-                ? "收窄到选中应用（" + state.selected + "）"
-                : "收窄到选中应用");
-        }
-        let tag = "读取中";
-        if (state.readonly) tag = "不可用";
-        else if (state.error) tag = "读取失败";
-        else if (state.loaded) tag = state.defaultAll ? "全部接管" : "已收窄";
-        text(UI.scopeTag, tag);
-        UI.scopeTag.classList.toggle("is-on", !!state.loaded && state.defaultAll);
-        UI.scopeTag.classList.toggle("tag-outline", !!state.loaded && !state.defaultAll);
-        if (UI.scopeHint) {
-            text(UI.scopeHint, Backend.isKsu()
-                ? "KSU/Lite：经 ksu.exec 调用 $MODDIR/core/webui.sh（scope list/set/setall），不可用时回退 mpl.ScopeCli。"
-                : "Ultra：通过模块 HTTP 服务（/soterScope）读写。");
-        }
+        s.items.forEach((item) => { frag.appendChild(item.el || buildRow(item)); });
+        clear(el);
+        el.appendChild(frag);
+        el.scrollTop = scrollTop;
     }
 
     function applyFilter() {
-        const needle = state.filter.trim().toLowerCase();
+        const needle = s.filter.trim().toLowerCase();
         let visible = 0;
-        state.items.forEach((item) => {
+        s.items.forEach((item) => {
             const hit = !needle || item.haystack.indexOf(needle) >= 0;
             item.visible = hit;
             if (hit) visible += 1;
             if (item.el) item.el.classList.toggle("is-hidden", !hit);
         });
-        state.visible = visible;
-        updateCounts();
-        toggleEmpty();
+        s.visible = visible;
+    }
+
+    function render() {
+        const empty = $("scope-empty");
+        const filtering = s.filter.trim().length > 0;
+        setText($("scope-count"), !s.loaded ? "" : t(filtering ? "scope.countFiltered" : "scope.count", {
+            selected: s.selected, total: s.total, visible: s.visible,
+        }));
+
+        const blocked = s.busy || s.loading || !s.loaded;
+        setEnabled($("scope-save"), !blocked && s.selected > 0);
+        setEnabled($("scope-restore"), !blocked);
+        $("scope-narrow").disabled = blocked || s.selected === 0;
+        $("scope-select-all").disabled = blocked || s.visible === 0;
+        $("scope-invert").disabled = blocked || s.visible === 0;
+        $("scope-clear").disabled = blocked || s.selected === 0;
+        $("scope-search").disabled = !s.loaded;
+        list().classList.toggle("is-busy", s.busy);
+
+        let message = "";
+        if (s.loaded && s.total === 0) message = t("scope.emptyNone");
+        else if (s.loaded && s.visible === 0) message = t("scope.emptyMatch");
+        empty.textContent = message;
+        empty.hidden = !message;
+
+        const showAlert = s.loaded && s.defaultAll;
+        $("scope-alert").hidden = !showAlert;
+        if (showAlert) {
+            $("scope-narrow").textContent = s.selected
+                ? t("scope.narrowCount", { count: s.selected }) : t("scope.narrow");
+        }
+
+        const chip = $("scope-chip");
+        if (s.err) setErrorChip(chip, s.err);
+        else if (!s.loaded) setChip(chip, null, "");
+        else if (s.defaultAll) setChip(chip, "on", t("scope.chipAll"));
+        else setChip(chip, null, t("scope.chipNarrow"));
+        s.problem.status = s.err ? "error" : (s.loaded ? "ready" : "loading");
+        s.problem.err = s.err;
+        problemBar($("scope-card"), [s.problem], () => { load(true).then(renderStatus); });
+    }
+
+    function renderText() {
+        s.items.forEach((item) => {
+            if (item.cb) item.cb.setAttribute("aria-label", t("scope.checkAria", { app: item.label || item.pkg }));
+        });
+        render();
     }
 
     function setSelected(item, on) {
-        if (!item || item.selected === on) return;
+        if (item.selected === on || item.uid <= 0) return;
         item.selected = on;
-        state.selected += on ? 1 : -1;
+        s.selected += on ? 1 : -1;
         if (item.cb) item.cb.checked = on;
     }
 
-    /* 全选 / 反选 / 清空：只作用于当前过滤结果 */
+    /* These act on the rows the current search shows. */
     function bulk(kind) {
-        state.items.forEach((item) => {
+        s.items.forEach((item) => {
             if (!item.visible) return;
             if (kind === "all") setSelected(item, true);
             else if (kind === "none") setSelected(item, false);
             else setSelected(item, !item.selected);
         });
-        updateCounts();
-        updateAlert();
-    }
-
-    function addPayloadError(data) {
-        if (!data || data.ok !== false) return null;
-        const reason = data.error || data.detail || "unknown";
-        return String(reason) + (data.stderr ? "：" + String(data.stderr) : "");
+        s.dirty = true;
+        render();
     }
 
     function applyData(data) {
-        const failure = addPayloadError(data);
-        if (failure) throw new Error(failure);
+        if (data && data.ok === false) throw backendError("backend", data.error || data.detail || "");
         const packages = Array.isArray(data && data.packages) ? data.packages : [];
-        const selectedUids = new Set(
-            (data && Array.isArray(data.selected) ? data.selected : []).map((value) => Number(value))
-        );
+        const selectedUids = new Set((data && Array.isArray(data.selected) ? data.selected : []).map(Number));
         const defaultAll = !!(data && data.defaultAll);
+        const pending = new Map();
+        if (s.dirty) s.items.forEach((item) => pending.set(item.pkg, item.selected));
 
-        state.defaultAll = defaultAll;
-        state.items = packages.map((raw) => {
+        s.defaultAll = defaultAll;
+        s.items = packages.map((raw) => {
             const pkg = String((raw && raw.pkg) || "");
             const label = String((raw && raw.label) || pkg);
             const uid = Number(raw && raw.uid) || 0;
@@ -1186,477 +980,729 @@ const ScopeCard = (() => {
                 pkg: pkg,
                 uid: uid,
                 label: label,
-                icon: (raw && typeof raw.icon === "string") ? raw.icon : "",
+                icon: raw && typeof raw.icon === "string" ? raw.icon : "",
                 haystack: (label + "\n" + pkg).toLowerCase(),
-                selected: defaultAll ? true : selectedUids.has(uid),
+                selected: pending.has(pkg) ? pending.get(pkg) : (defaultAll ? true : selectedUids.has(uid)),
                 visible: true,
                 el: null,
                 cb: null,
             };
         }).filter((item) => item.pkg.length > 0);
-        state.items.sort(compareLabel);
-        state.byPkg = new Map(state.items.map((item) => [item.pkg, item]));
-        state.total = state.items.length;
-        state.selected = state.items.reduce((sum, item) => sum + (item.selected ? 1 : 0), 0);
-        state.visible = state.total;
+        collator = typeof Intl !== "undefined" && Intl.Collator
+            ? new Intl.Collator(TEEI18N.locale(), { sensitivity: "base", numeric: true }) : null;
+        s.items.sort(compare);
+        s.byPkg = new Map(s.items.map((item) => [item.pkg, item]));
+        s.total = s.items.length;
+        s.selected = s.items.reduce((sum, item) => sum + (item.selected ? 1 : 0), 0);
+        renderRows();
+        applyFilter();
+    }
+
+    async function load(reprobe) {
+        if (s.loading) return;
+        if (reprobe) Backend.reset();
+        s.loading = true;
+        s.err = null;
+        if (!s.loaded) renderSkeleton();
         render();
-    }
-
-    function setBusy(on, label) {
-        state.busy = !!on;
-        if (on) {
-            UI.scopeSave.dataset.label = UI.scopeSave.textContent;
-            UI.scopeSave.textContent = label || "保存中…";
-            UI.scopeRestore.disabled = true;
-        } else if (UI.scopeSave.dataset.label) {
-            UI.scopeSave.textContent = UI.scopeSave.dataset.label;
-            delete UI.scopeSave.dataset.label;
-        }
-        updateCounts();
-        updateAlert();
-    }
-
-    async function load(force) {
-        if (state.loading) return;
-        if (force) Backend.reset();   /* 重试时重新探测模块根（换模块 / 换 dex 后仍可用） */
-        state.loading = true;
-        state.error = null;
-        state.readonly = false;
-        UI.scopeError.hidden = true;
-        UI.scopeRetry.hidden = true;
-        if (!state.loaded) renderSkeleton();
-        updateCounts();
         try {
-            const data = await RequestApi.soterScope();
-            applyData(data);
-            state.loaded = true;
-            clearFailure("scope");
+            applyData(await RequestApi.soterScope());
+            s.loaded = true;
         } catch (err) {
-            const described = Backend.describe(err);
-            state.error = err;
-            state.loaded = false;
-            state.readonly = described.level !== "failed";
-            state.items = [];
-            state.byPkg = new Map();
-            state.total = 0;
-            state.selected = 0;
-            state.visible = 0;
-            state.defaultAll = false;
-            UI.scopeList.replaceChildren();
-            text(UI.scopeError, described.text);
-            UI.scopeError.hidden = false;
-            /* 明确不支持 → 没有可重试的东西；后端缺失 → 给「重新检测」（清缓存后再探一次） */
-            UI.scopeRetry.hidden = described.level === "unsupported";
-            UI.scopeRetry.textContent = described.level === "unavailable" ? "重新检测" : "重试";
-            if (state.readonly) noteUnavailable("scope", "Soter 接管范围", described.text);
-            else noteFailure("scope", "Soter 接管范围", err);
-            console.error("读取 Soter 接管范围失败:", described.text, err);
+            console.warn("[scope]", err && err.message);
+            s.err = err;
+            if (!s.dirty) {
+                s.loaded = false;
+                s.items = [];
+                s.byPkg = new Map();
+                s.total = 0;
+                s.selected = 0;
+                s.visible = 0;
+                s.defaultAll = false;
+                clear(list());
+            }
         } finally {
-            state.loading = false;
-            applyFilter();
-            updateAlert();
-            updateCounts();
+            s.loading = false;
+            render();
         }
     }
 
     async function save(all) {
-        if (state.busy || state.loading || state.readonly) return;
+        if (s.busy || s.loading || !s.loaded) return;
+        /* Apps sharing one uid would otherwise send it twice. */
         const uids = [];
-        state.items.forEach((item) => { if (item.selected) uids.push(item.uid); });
-        if (!all && uids.length === 0) {
-            showToast("请至少选择一个应用");
+        s.items.forEach((item) => {
+            if (item.selected && item.uid > 0 && uids.indexOf(item.uid) < 0) uids.push(item.uid);
+        });
+        if (!all && !uids.length) {
+            showToast(t("scope.pickOne"), true);
             return;
         }
-        setBusy(true, all ? "恢复中…" : "保存中…");
+        s.busy = true;
+        setBusy($("scope-save"), all ? "scope.restoring" : "common.saving");
+        render();
         try {
-            const payload = all ? { all: true } : { uids: uids };
-            const resp = await RequestApi.soterScopeSet(payload);
-            if (!resp || resp.ok === false) {
-                throw new Error((resp && (resp.error || resp.detail || resp.stderr)) || "unknown");
+            const reply = await RequestApi.soterScopeSet(all ? { all: true } : { uids: uids });
+            if (!reply || reply.ok === false) {
+                throw backendError("backend", (reply && (reply.error || reply.detail || reply.stderr)) || "");
             }
-            const count = (resp && typeof resp.count === "number") ? resp.count : uids.length;
-            showToast(all ? "已恢复全放行" : "已保存 · 接管 " + count + " 个应用");
-            await load(true);
+            const selectedCount = s.selected;
+            s.dirty = false;
+            await load(false);
+            showToast(all ? t("scope.restored")
+                : t("scope.saved", { count: typeof reply.count === "number" ? reply.count : selectedCount }));
         } catch (err) {
-            console.error("保存 Soter 接管范围失败:", err);
-            showToast((all ? "恢复全放行失败：" : "保存失败：") + Backend.reason(err));
+            console.warn("[scope]", err && err.message);
+            showToast(t(all ? "scope.restoreFailed" : "scope.saveFailed", { reason: errorText(err) }), true);
         } finally {
-            setBusy(false);
+            s.busy = false;
+            setBusy($("scope-save"), null);
+            render();
         }
     }
 
     function init() {
-        UI.scopeSearch.addEventListener("input", () => {
+        $("scope-search").addEventListener("input", () => {
             if (filterTimer) clearTimeout(filterTimer);
             filterTimer = setTimeout(() => {
-                state.filter = UI.scopeSearch.value || "";
+                s.filter = $("scope-search").value || "";
                 applyFilter();
+                render();
             }, 120);
-        }, { passive: true });
-
-        UI.scopeList.addEventListener("change", (event) => {
+        });
+        list().addEventListener("change", (event) => {
             const check = event.target;
             if (!check || !check.classList || !check.classList.contains("scope-check")) return;
-            const row = check.closest ? check.closest(".scope-row") : null;
-            const item = row ? state.byPkg.get(row.dataset.pkg) : null;
+            const row = check.closest(".scope-row");
+            const item = row ? s.byPkg.get(row.dataset.pkg) : null;
             if (!item) return;
             item.selected = !!check.checked;
-            state.selected += item.selected ? 1 : -1;
-            updateCounts();
-            updateAlert();
+            s.selected += item.selected ? 1 : -1;
+            s.dirty = true;
+            render();
         });
-
-        UI.scopeSelectAll.addEventListener("click", () => bulk("all"));
-        UI.scopeInvert.addEventListener("click", () => bulk("invert"));
-        UI.scopeClear.addEventListener("click", () => bulk("none"));
-        UI.scopeSave.addEventListener("click", () => save(false));
-        UI.scopeRestore.addEventListener("click", () => save(true));
-        UI.scopeNarrow.addEventListener("click", () => save(false));
-        UI.scopeRetry.addEventListener("click", () => load(true));
-        updateAlert();
-        updateCounts();
-        toggleEmpty();
+        $("scope-select-all").addEventListener("click", () => bulk("all"));
+        $("scope-invert").addEventListener("click", () => bulk("invert"));
+        $("scope-clear").addEventListener("click", () => bulk("none"));
+        $("scope-save").addEventListener("click", () => save(false));
+        $("scope-restore").addEventListener("click", () => save(true));
+        $("scope-narrow").addEventListener("click", () => save(false));
     }
 
-    return { init, load };
+    return { init, load, renderText, problem: () => s.problem };
 })();
 
-/* --------------------------- Local presentation --------------------------- */
-const Appearance = (() => {
-    let style = "miuix", scheme = "auto";
-    function save() {
-        try {
-            localStorage.setItem("maplesu-tee-style", style);
-            localStorage.setItem("maplesu-tee-scheme", scheme);
-        } catch (e) { /* Browser storage is optional. */ }
-    }
-    function apply() {
-        const hosted = window.MapleSUAppearance;
-        const root = document.documentElement;
-        const selectedStyle = hosted ? hosted.style : style;
-        const selectedScheme = hosted ? hosted.scheme : scheme;
-        document.getElementById("appearance-summary").textContent = hosted
-            ? "跟随 MapleSU 管理器的界面风格与配色。" : "选择适合你的使用方式。";
-        root.dataset.style = selectedStyle;
-        root.dataset.scheme = selectedScheme === "auto"
-            ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : selectedScheme;
-        document.querySelectorAll("#style-choice button").forEach((button) => {
-            button.classList.toggle("is-active", button.dataset.value === selectedStyle);
-            button.setAttribute("aria-pressed", String(button.dataset.value === selectedStyle));
-            button.disabled = !!hosted;
-        });
-        document.querySelectorAll("#scheme-choice button").forEach((button) => {
-            button.classList.toggle("is-active", button.dataset.value === selectedScheme);
-            button.setAttribute("aria-pressed", String(button.dataset.value === selectedScheme));
-            button.disabled = !!hosted;
-        });
-        Snow.sync();
-    }
-    function init() {
-        try { style = localStorage.getItem("maplesu-tee-style") || style;
-            scheme = localStorage.getItem("maplesu-tee-scheme") || scheme; } catch (e) {}
-        if (!["miuix", "material"].includes(style)) style = "miuix";
-        if (!["auto", "light", "dark"].includes(scheme)) scheme = "auto";
-        document.querySelectorAll("#style-choice button").forEach((button) => {
-            button.onclick = () => { style = button.dataset.value; save(); apply(); };
-        });
-        document.querySelectorAll("#scheme-choice button").forEach((button) => {
-            button.onclick = () => { scheme = button.dataset.value; save(); apply(); };
-        });
-        const dialog = document.getElementById("appearance-dialog");
-        document.getElementById("btn-theme").onclick = () => dialog.showModal();
-        document.getElementById("btn-theme-done").onclick = () => dialog.close();
-        dialog.addEventListener("click", (event) => { if (event.target === dialog) {
-            const rect = dialog.getBoundingClientRect();
-            if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) dialog.close();
-        } });
-        matchMedia("(prefers-color-scheme: dark)").addEventListener("change", apply);
-        window.addEventListener("maplesuappearancechange", apply);
-        apply();
-    }
-    return { init };
-})();
+/* --------------------------------- system ---------------------------------- */
 
-/* A small cached maple path, capped at 30fps. Hidden/reduced-motion pages do no work. */
-const Snow = (() => {
-    const KEY = "mpl_webui_snow";
-    let canvas, ctx, leaves = [], frameId = 0, lastFrame = 0, enabled = true;
-    const reduced = matchMedia("(prefers-reduced-motion: reduce)");
-    const leafPath = new Path2D("M0 -12 L3 -5 L7 -8 L6 -2 L12 -3 L8 2 L9 5 L3 5 L0 10 L-3 5 L-9 5 L-8 2 L-12 -3 L-6 -2 L-7 -8 L-3 -5 Z");
-    function resize() {
-        if (!canvas) return;
-        const dpr = Math.min(devicePixelRatio || 1, 1.5);
-        canvas.width = Math.round(innerWidth * dpr); canvas.height = Math.round(innerHeight * dpr);
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    }
-    function paint(time) {
-        if (!frameId) return;
-        frameId = requestAnimationFrame(paint);
-        if (time - lastFrame < 32) return;
-        const delta = lastFrame ? Math.min(time - lastFrame, 64) / 1000 : 0;
-        lastFrame = time;
-        ctx.clearRect(0, 0, innerWidth, innerHeight);
-        leaves.forEach((leaf) => {
-            leaf.y += leaf.speed * delta; leaf.phase += delta * .7;
-            if (leaf.y > innerHeight + 24) leaf.y = -24;
-            ctx.save(); ctx.translate(leaf.x + Math.sin(leaf.phase) * 20, leaf.y);
-            ctx.rotate(Math.sin(leaf.phase) * .55);
-            ctx.scale(leaf.size * (.45 + Math.abs(Math.cos(leaf.phase)) * .55), leaf.size);
-            ctx.globalAlpha = .16; ctx.fillStyle = leaf.color; ctx.fill(leafPath);
-            ctx.strokeStyle = leaf.color; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(0, 13); ctx.stroke(); ctx.restore();
-        });
-    }
-    function sync() {
-        if (!canvas) return;
-        const motion = !window.MapleSUAppearance || window.MapleSUAppearance.motion !== false;
-        const active = enabled && motion && !reduced.matches && !document.hidden && document.documentElement.dataset.style !== "material";
-        UI.snowBtn.setAttribute("aria-pressed", String(enabled));
-        if (active && !frameId) { lastFrame = 0; frameId = requestAnimationFrame(paint); }
-        else if (!active) { cancelAnimationFrame(frameId); frameId = 0; ctx.clearRect(0, 0, innerWidth, innerHeight); }
-    }
-    function set(on) { enabled = on; try { localStorage.setItem(KEY, on ? "1" : "0"); } catch (e) {} sync(); }
-    function init() {
-        canvas = document.getElementById("snow"); ctx = canvas.getContext("2d");
-        if (!ctx) { canvas = null; return; }
-        try { enabled = localStorage.getItem(KEY) !== "0"; } catch (e) {}
-        resize();
-        const count = navigator.deviceMemory && navigator.deviceMemory <= 2 ? 4 : 10;
-        leaves = Array.from({ length: count }, (_, i) => ({ x: Math.random() * innerWidth,
-            y: Math.random() * innerHeight, phase: Math.random() * 6, speed: 10 + Math.random() * 12,
-            size: .45 + Math.random() * .45, color: ["#dc6947", "#d99536", "#be573a"][i % 3] }));
-        window.addEventListener("resize", resize, { passive: true });
-        document.addEventListener("visibilitychange", sync);
-        reduced.addEventListener("change", sync);
-        sync();
-    }
-    return { init, set, sync };
-})();
-
-/* -------------------------------- 绑定 -------------------------------- */
-
-function bind() {
-    UI.soterToggle.addEventListener("change", onSoterToggle);
-    UI.soterCertsToggle.addEventListener("change", onSoterCertsToggle);
-    UI.keyboxApply.addEventListener("click", onApplyKeybox);
-    UI.patchApply.addEventListener("click", onApplyPatch);
-
-    UI.hideBl.addEventListener("change", () =>
-        saveToggle(UI.hideBl, RequestApi.setHideBootloaderToggle,
-            "设置已保存，重启生效", "设备状态兼容设置保存失败")
-    );
-
-    UI.autoTarget.addEventListener("change", async () => {
-        const ok = await saveToggle(UI.autoTarget, RequestApi.setAutoThirdAppToggle,
-            "设置已保存，重启生效", "应用列表设置保存失败");
-        if (ok) refreshTargetSub(UI.autoTarget.checked);
-    });
-
-    /* TEE 修复已按"未实现"置灰只读（loadFixTee），不再绑定 change 处理器。 */
-
-    [...UI.patchMode.querySelectorAll(".seg-btn")].forEach((btn) => {
-        btn.addEventListener("click", () => {
-            applyPatchModeUI(btn.dataset.mode);
-            if (btn.dataset.mode === "auto") onApplyPatch();
-        });
-    });
-
-    UI.snowBtn.addEventListener("click", () => {
-        const on = UI.snowBtn.getAttribute("aria-pressed") !== "true";
-        Snow.set(on);
-    });
-
-    /* ---- 证书自动更新 ---- */
-    UI.kbupdToggle.addEventListener("change", onToggleKeyboxUpdate);
-    UI.kbupdSave.addEventListener("click", onSaveKeyboxUpdate);
-    UI.kbupdNow.addEventListener("click", onUpdateKeyboxNow);
-    UI.kbupdSource.addEventListener("change", () => {
-        UI.kbupdCustomRow.classList.toggle("is-visible", UI.kbupdSource.value === "custom");
-    });
-
-    /* ---- Soter 接管范围 ---- */
-    ScopeCard.init();
+async function loadSystem() {
+    await Promise.all([loadHideBl(), loadAutoTarget()]);
 }
 
-/* -------------------------------- 入口 -------------------------------- */
+async function loadHideBl() {
+    await read(state.hideBl, async () => {
+        requireSupport("get hide_bootloader");
+        return String(await RequestApi.getHideBootloaderToggle()).trim() === "1";
+    });
+    renderSystem();
+}
 
-function applyBackendMode() {
-    if (!UI.backendMode) return;
+async function loadTargetCount() {
+    const target = state.autoTarget;
+    if (target.status !== "ready" || !target.data) {
+        target.count = null;
+    } else {
+        try {
+            target.count = await RequestApi.getTargetCount();
+        } catch (err) {
+            /* The switch state is still right without a count. */
+            target.count = null;
+        }
+    }
+    renderSystem();
+}
+
+async function loadAutoTarget() {
+    await read(state.autoTarget, async () => {
+        requireSupport("get auto_third_app");
+        return String(await RequestApi.getAutoThirdAppToggle()).trim() === "1";
+    });
+    renderSystem();
+    await loadTargetCount();
+}
+
+function renderSystem() {
+    const hide = state.hideBl;
+    const hideToggle = $("toggle-hide-bl");
+    const hideSub = $("hide-bl-sub");
+    if (hide.status === "ready") {
+        hideToggle.checked = !!hide.data;
+        hideToggle.disabled = hide.saving;
+        hideSub.textContent = t("system.hideBlSub");
+    } else {
+        hideToggle.disabled = true;
+        hideSub.textContent = hide.status === "error" ? DASH : t("common.loading");
+    }
+
+    const auto = state.autoTarget;
+    const autoToggle = $("toggle-auto-target");
+    const autoSub = $("target-sub");
+    if (auto.status === "ready") {
+        autoToggle.checked = !!auto.data;
+        autoToggle.disabled = auto.saving;
+        if (!auto.data) autoSub.textContent = t("system.autoSubOff");
+        else if (auto.count === null) autoSub.textContent = t("system.autoSubOn");
+        else autoSub.textContent = t("system.autoSubCount", { count: auto.count });
+    } else {
+        autoToggle.disabled = true;
+        autoSub.textContent = auto.status === "error" ? DASH : t("common.loading");
+    }
+    problemBar($("system-card"), [hide, auto], () => { loadSystem().then(renderStatus); });
+}
+
+async function onHideBlToggle() {
+    const saved = await writeSwitch($("toggle-hide-bl"), state.hideBl, RequestApi.setHideBootloaderToggle, "system.hideBlFailed");
+    if (saved) showToast(t("system.hideBlSaved"));
+    renderSystem();
+}
+
+async function onAutoTargetToggle() {
+    const saved = await writeSwitch($("toggle-auto-target"), state.autoTarget, RequestApi.setAutoThirdAppToggle, "system.autoFailed");
+    renderSystem();
+    if (saved) {
+        showToast(t("system.autoSaved"));
+        await loadTargetCount();
+    }
+}
+
+/* ------------------------------ security patch ----------------------------- */
+
+async function loadPatch() {
+    await read(state.patch, () => {
+        requireSupport("get patch");
+        return RequestApi.getSecurityPatch();
+    });
+    if (state.patch.status === "ready") {
+        state.patch.mode = state.patch.data.mode === "fixed" ? "fixed" : "auto";
+        if (state.patch.data.mode === "fixed" && state.patch.data.value && document.activeElement !== $("patch-date")) {
+            $("patch-date").value = state.patch.data.value;
+        }
+    }
+    renderPatch();
+}
+
+function prettyPatch(value) {
+    if (!value) return t("common.unknown");
+    if (value === "prop") return t("patch.modeAuto");
+    return value;
+}
+
+function renderPatch() {
+    const s = state.patch;
+    const ready = s.status === "ready";
+    const buttons = Array.prototype.slice.call($("patch-mode").querySelectorAll(".seg-btn"));
+    buttons.forEach((button) => {
+        button.classList.toggle("is-active", ready && button.dataset.mode === s.mode);
+        button.setAttribute("aria-pressed", String(ready && button.dataset.mode === s.mode));
+        button.disabled = !ready || s.saving;
+    });
+    $("patch-fixed-row").hidden = !(ready && s.mode === "fixed");
+    $("patch-date").disabled = !ready || s.saving;
+    setEnabled($("btn-apply-patch"), ready && !s.saving);
+    setText($("patch-device"), ready ? prettyPatch(s.data.device) : "");
+    setText($("patch-effective"), ready ? prettyPatch(s.data.effective) : "");
+    problemBar($("patch-card"), [s], () => { loadPatch().then(renderStatus); });
+}
+
+async function applyPatch(value, doneKey) {
+    const s = state.patch;
+    s.token += 1;
+    s.saving = true;
+    renderPatch();
+    try {
+        const reply = await RequestApi.setSecurityPatch(value);
+        if (!isOk(reply)) throw backendError("backend", String(reply));
+        s.saving = false;
+        await loadPatch();
+        showToast(t(doneKey));
+    } catch (err) {
+        console.warn("[patch]", err && err.message);
+        s.saving = false;
+        /* What the switch shows has to go back to what is really stored. */
+        if (s.data) s.mode = s.data.mode === "fixed" ? "fixed" : "auto";
+        renderPatch();
+        showToast(t("patch.saveFailed", { reason: errorText(err) }), true);
+    }
+}
+
+function onPatchMode(mode) {
+    const s = state.patch;
+    if (s.status !== "ready" || s.saving || mode === s.mode) return;
+    s.mode = mode;
+    renderPatch();
+    /* Fixed waits for a date and Apply; following the device needs nothing more. */
+    if (mode === "auto") applyPatch("auto", "patch.autoToast");
+}
+
+async function onApplyPatch() {
+    const value = ($("patch-date").value || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        showToast(t("patch.badDate"), true);
+        return;
+    }
+    const button = $("btn-apply-patch");
+    setBusy(button, "common.applying");
+    await applyPatch(value, "patch.fixedToast");
+    setBusy(button, null);
+    renderPatch();
+}
+
+/* ------------------------------ compatibility ------------------------------ */
+
+const COMPAT_MARKS = { ok: "✓", info: "i", warn: "!", error: "×" };
+const COMPAT_ORDER = { error: 0, warn: 1, info: 2, ok: 3 };
+
+function compatText(item) {
+    const params = { a: item.a, b: item.b, c: item.c };
+    let key = "compat.item." + item.key;
+    if (item.key === "props_changed" && item.c && item.c !== "0") key = "compat.item.props_changed_added";
+    if (item.key === "first_api") {
+        params.who = item.a ? t("compat.whoModule", { name: item.a }) : t("compat.whoUnknown");
+    }
+    if (item.key === "pki_prop") params.c = item.c || t("compat.none");
+    if (!TEEI18N.has(key)) return [item.key, item.a, item.b, item.c].filter(Boolean).join(" ");
+    return t(key, params);
+}
+
+async function runCompat() {
+    const s = state.compat;
+    if (!Backend.isKsu() || Backend.supports("compat") === false) {
+        s.hidden = true;
+        renderCompat();
+        return;
+    }
+    s.hidden = false;
+    s.status = "running";
+    s.token += 1;
+    const token = s.token;
+    setBusy($("compat-run"), "compat.running");
+    renderCompat();
+    try {
+        const data = await RequestApi.compatCheck();
+        if (token !== s.token) return;
+        s.status = "ready";
+        s.data = data;
+        s.err = null;
+    } catch (err) {
+        if (token !== s.token) return;
+        console.warn("[compat]", err && err.message);
+        s.err = err;
+        if (Backend.describe(err).level === "unsupported") s.hidden = true;
+        s.status = "error";
+    }
+    setBusy($("compat-run"), null);
+    renderCompat();
+}
+
+function renderCompat() {
+    const s = state.compat;
+    const card = $("compat-card");
+    card.hidden = s.hidden;
+    if (s.hidden) return;
+    const listEl = $("compat-list");
+    const items = s.data ? s.data.items.slice().sort((a, b) => COMPAT_ORDER[a.level] - COMPAT_ORDER[b.level]) : [];
+    const errors = items.filter((item) => item.level === "error").length;
+    const warnings = items.filter((item) => item.level === "warn").length;
+    const needsAttention = errors + warnings;
+    const shown = s.showAll ? items : items.filter((item) => item.level === "error" || item.level === "warn");
+
+    while (listEl.firstChild) listEl.removeChild(listEl.firstChild);
+    shown.forEach((item) => {
+        const row = document.createElement("li");
+        row.className = "check";
+        const mark = document.createElement("span");
+        mark.className = "check-mark";
+        mark.setAttribute("data-level", item.level);
+        mark.setAttribute("aria-hidden", "true");
+        mark.textContent = COMPAT_MARKS[item.level];
+        const text = document.createElement("span");
+        text.className = "check-text";
+        text.textContent = compatText(item);
+        row.appendChild(mark);
+        row.appendChild(text);
+        listEl.appendChild(row);
+    });
+
+    const chip = $("compat-chip");
+    const summary = $("compat-summary");
+    if (!s.data) {
+        setChip(chip, null, "");
+        summary.hidden = true;
+    } else {
+        if (errors) setChip(chip, "err", t("compat.chipError", { count: errors }));
+        else if (warnings) setChip(chip, "warn", t("compat.chipWarn", { count: warnings }));
+        else setChip(chip, "ok", t("compat.chipOk"));
+        summary.textContent = t("compat.allClear");
+        summary.hidden = needsAttention > 0;
+    }
+
+    const toggle = $("compat-toggle");
+    toggle.hidden = !s.data || items.length === needsAttention;
+    toggle.textContent = s.showAll ? t("compat.showLess") : t("compat.showAll", { count: items.length });
+
+    const time = $("compat-time");
+    const stamp = s.data && s.data.time ? TEEI18N.date(s.data.time) : "";
+    time.textContent = stamp ? t("compat.checkedAt", { time: stamp }) : "";
+    time.hidden = !stamp;
+
+    PanelBar.show(card, s.status === "error" && s.err
+        ? { text: t("compat.failed", { reason: errorText(s.err) }) } : null);
+}
+
+/* ---------------------------- backend-only panels --------------------------- */
+
+async function loadDiagnostics() {
+    if (!Backend.isKsu()) {
+        state.debug.status = "idle";
+        renderDiagnostics();
+        return;
+    }
+    await read(state.debug, () => {
+        requireSupport("get debug");
+        return RequestApi.getDebug();
+    });
+    renderDiagnostics();
+}
+
+function renderDiagnostics() {
+    const s = state.debug;
+    const toggle = $("toggle-debug");
+    const button = $("btn-export-logs");
+    const sub = $("diag-sub");
+    const hint = $("diag-hint");
     const ksu = Backend.isKsu();
-    UI.backendMode.textContent = ksu ? "KSU / Lite" : "Ultra";
-    UI.backendMode.title = ksu
-        ? "通过 window.ksu.exec 调用 $MODDIR/core/webui.sh"
-        : "通过模块 HTTP 服务读写";
+    if (!ksu) {
+        toggle.disabled = true;
+        button.disabled = true;
+        sub.textContent = t("diag.ksuOnly");
+    } else if (s.status === "ready") {
+        toggle.checked = !!s.data;
+        toggle.disabled = s.saving;
+        setEnabled(button, true);
+        sub.textContent = t(s.data ? "diag.on" : "diag.off");
+    } else {
+        toggle.disabled = true;
+        setEnabled(button, s.status === "error");
+        sub.textContent = s.status === "error" ? DASH : t("common.loading");
+    }
+    const result = s.result;
+    const line = $("diag-result");
+    line.hidden = !result;
+    if (result) {
+        line.textContent = result.path ? t("diag.exported", { path: result.path }) : t("diag.exportedNoPath");
+        hint.textContent = result.path ? t("diag.size", { count: result.bytes }) : t("diag.hint");
+    } else {
+        hint.textContent = t("diag.hint");
+    }
+    $("btn-copy-path").hidden = !(result && result.path);
+    problemBar($("diag-card"), [s], () => { loadDiagnostics().then(renderStatus); });
+}
+
+async function onDebugToggle() {
+    const input = $("toggle-debug");
+    const want = input.checked;
+    const saved = await writeSwitch(input, state.debug, RequestApi.setDebug, "diag.saveFailed");
+    if (saved) showToast(t(want ? "diag.toastOn" : "diag.toastOff"));
+    renderDiagnostics();
+}
+
+async function onExportLogs() {
+    const button = $("btn-export-logs");
+    setBusy(button, "diag.exporting");
+    try {
+        state.debug.result = await RequestApi.exportLogs();
+        showToast(t("diag.toastExported"));
+    } catch (err) {
+        console.warn("[logs]", err && err.message);
+        showToast(t("diag.exportFailed", { reason: errorText(err) }), true);
+    } finally {
+        setBusy(button, null);
+        renderDiagnostics();
+    }
+}
+
+/* navigator.clipboard only exists on secure origins and is often refused inside an
+   iframe, so fall back to the older selection-based copy. */
+async function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch (err) {
+            /* Fall through to the older way. */
+        }
+    }
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    let copied = false;
+    try {
+        copied = document.execCommand("copy");
+    } catch (err) {
+        copied = false;
+    }
+    document.body.removeChild(area);
+    return copied;
+}
+
+async function onCopyPath() {
+    const result = state.debug.result;
+    if (!result || !result.path) return;
+    const copied = await copyText(result.path);
+    showToast(t(copied ? "diag.copied" : "diag.copyFailed"), !copied);
+}
+
+async function loadTakeover() {
+    if (!Backend.isKsu()) {
+        state.takeover.status = "idle";
+        renderTakeover();
+        return;
+    }
+    await read(state.takeover, () => {
+        requireSupport("get key_takeover");
+        return RequestApi.getKeyTakeover();
+    });
+    renderTakeover();
+}
+
+function renderTakeover() {
+    const s = state.takeover;
+    const toggle = $("toggle-key-takeover");
+    const sub = $("takeover-sub");
+    if (!Backend.isKsu()) {
+        toggle.disabled = true;
+        sub.textContent = t("diag.ksuOnly");
+    } else if (s.status === "ready") {
+        toggle.checked = !!s.data;
+        toggle.disabled = s.saving;
+        sub.textContent = t(s.data ? "exp.takeoverOn" : "exp.takeoverOff");
+    } else {
+        toggle.disabled = true;
+        sub.textContent = s.status === "error" ? DASH : t("common.loading");
+    }
+    problemBar($("takeover-card"), [s], () => { loadTakeover().then(renderStatus); });
+}
+
+async function onTakeoverToggle() {
+    const input = $("toggle-key-takeover");
+    const want = input.checked;
+    const saved = await writeSwitch(input, state.takeover, RequestApi.setKeyTakeover, "exp.saveFailed");
+    if (saved) showToast(t(want ? "exp.toastOn" : "exp.toastOff"));
+    renderTakeover();
+}
+
+/* ------------------------------- appearance -------------------------------- */
+
+const Appearance = (() => {
+    const THEMES = ["spring", "summer", "autumn", "winter"];
+    const SCHEMES = ["auto", "light", "dark"];
+    const THEME_KEY = "maplesu-tee-theme";
+    const SCHEME_KEY = "maplesu-tee-scheme";
+    let theme = "autumn";
+    let scheme = "auto";
+    let darkQuery = null;
+
+    function remember(key, value) {
+        try { localStorage.setItem(key, value); } catch (e) { /* It then lasts for this page only. */ }
+    }
+
+    function recall(key) {
+        try { return localStorage.getItem(key); } catch (e) { return null; }
+    }
+
+    function apply() {
+        const root = document.documentElement;
+        const host = window.MapleSUAppearance || null;
+        const hostScheme = host && (host.scheme === "light" || host.scheme === "dark" || host.scheme === "auto") ? host.scheme : "";
+        const hostColors = host && host.colors && Object.keys(host.colors).length ? host.colors : null;
+        const chosen = hostScheme || scheme;
+        root.setAttribute("data-theme", theme);
+        root.setAttribute("data-scheme", chosen === "auto" ? (darkQuery && darkQuery.matches ? "dark" : "light") : chosen);
+        if (hostColors) window.teeHostColors(hostColors);
+        root.classList.toggle("no-motion", !!(host && host.motion === false));
+
+        $("settings-hosted").hidden = !(hostScheme || hostColors);
+        Array.prototype.forEach.call($("season-choice").querySelectorAll(".season"), (button) => {
+            const active = button.dataset.value === theme;
+            button.classList.toggle("is-active", active);
+            button.setAttribute("aria-pressed", String(active));
+            button.disabled = !!hostColors;
+        });
+        Array.prototype.forEach.call($("scheme-choice").querySelectorAll(".seg-btn"), (button) => {
+            const active = button.dataset.value === chosen;
+            button.classList.toggle("is-active", active);
+            button.setAttribute("aria-pressed", String(active));
+            button.disabled = !!hostScheme;
+        });
+    }
+
+    function renderLanguages() {
+        const select = $("language-select");
+        while (select.firstChild) select.removeChild(select.firstChild);
+        const add = (value, label) => {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = label;
+            select.appendChild(option);
+        };
+        add(TEEI18N.AUTO, t("settings.followSystem"));
+        TEEI18N.available().forEach((item) => add(item.tag, item.name));
+        select.value = TEEI18N.preference();
+    }
+
+    function init() {
+        const savedTheme = recall(THEME_KEY);
+        const savedScheme = recall(SCHEME_KEY);
+        if (THEMES.indexOf(savedTheme) >= 0) theme = savedTheme;
+        if (SCHEMES.indexOf(savedScheme) >= 0) scheme = savedScheme;
+        darkQuery = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+
+        Array.prototype.forEach.call($("season-choice").querySelectorAll(".season"), (button) => {
+            button.addEventListener("click", () => {
+                theme = button.dataset.value;
+                remember(THEME_KEY, theme);
+                apply();
+            });
+        });
+        Array.prototype.forEach.call($("scheme-choice").querySelectorAll(".seg-btn"), (button) => {
+            button.addEventListener("click", () => {
+                scheme = button.dataset.value;
+                remember(SCHEME_KEY, scheme);
+                apply();
+            });
+        });
+        $("language-select").addEventListener("change", (event) => TEEI18N.setLocale(event.target.value));
+
+        const dialog = $("settings-dialog");
+        $("btn-settings").addEventListener("click", () => {
+            if (dialog.showModal) dialog.showModal();
+            else dialog.setAttribute("open", "");
+        });
+        $("btn-settings-done").addEventListener("click", () => {
+            if (dialog.close) dialog.close();
+            else dialog.removeAttribute("open");
+        });
+        dialog.addEventListener("click", (event) => {
+            if (event.target !== dialog) return;
+            const box = dialog.getBoundingClientRect();
+            if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) {
+                dialog.close();
+            }
+        });
+
+        if (darkQuery) {
+            if (darkQuery.addEventListener) darkQuery.addEventListener("change", apply);
+            else if (darkQuery.addListener) darkQuery.addListener(apply);
+        }
+        window.addEventListener("maplesuappearancechange", apply);
+        apply();
+        renderLanguages();
+    }
+
+    return { init, renderLanguages };
+})();
+
+/* ------------------------------- page start -------------------------------- */
+
+function renderAll() {
+    document.querySelectorAll("[data-busy-key]").forEach((button) => {
+        button.textContent = t(button.dataset.busyKey);
+    });
+    renderBackend();
+    renderInfo();
+    renderSoter();
+    renderKeybox();
+    renderKbu();
+    ScopeCard.renderText();
+    renderSystem();
+    renderPatch();
+    renderCompat();
+    renderDiagnostics();
+    renderTakeover();
+    renderStatus();
+    Appearance.renderLanguages();
 }
 
 async function refreshPage() {
     if (pageLoading) return;
     pageLoading = true;
-    /* 手动刷新时重新探测 $MODDIR / webui.sh（装、卸模块后不用整页重载） */
+    /* Looks for the module again, so installing or removing one needs no page reload. */
     Backend.reset();
-    const reload = document.getElementById("btn-reload");
+    const reload = $("btn-reload");
     reload.disabled = true;
-    renderPageState();
-    /* 接管范围要跑一次 CLI（可能几百个应用 + 图标），单独加载，不拖慢其它卡片 */
+    renderBackend();
+    renderStatus();
+    /* The app list can take a while, so it does not hold up the other cards. */
     const scope = ScopeCard.load();
-    const version = loadVersionInfo().then(async () => {
-        if (supportsKeyboxUpdate) await loadKeyboxUpdate();
-    });
     try {
-        await Promise.all([version, loadSoter(), loadSoterCerts(), loadKeyboxes(),
-            loadSystemToggles(), loadSecurityPatch()]);
+        /* First, because it tells the rest what this backend supports. */
+        await loadVersionInfo();
+        await Promise.all([loadKbu(), loadSoterCard(), loadKeyboxes(), loadSystem(), loadPatch(),
+            loadDiagnostics(), loadTakeover()]);
     } finally {
         pageLoading = false;
         reload.disabled = false;
-        renderPageState();
+        renderStatus();
     }
-    await scope;   /* 只等它把内部错误状态渲染完，不影响上面的状态文案 */
-    renderPageState();
+    /* Runs once per page, since it has its own button. Waiting for the app list as well
+       would make this card appear late and push the page down under the user's finger. */
+    if (state.compat.status === "idle") runCompat();
+    await scope;
+    renderStatus();
 }
 
-async function onReady() {
-    [UI.soterToggle, UI.soterCertsToggle, UI.hideBl, UI.autoTarget, UI.fixTee,
-        UI.keyboxSelect, UI.keyboxApply,
-        UI.patchDate, UI.patchApply, UI.kbupdToggle, UI.kbupdSource, UI.kbupdCustomUrl,
-        UI.kbupdInterval, UI.kbupdSave, UI.kbupdNow,
-        UI.scopeSearch, UI.scopeSelectAll, UI.scopeInvert, UI.scopeClear,
-        UI.scopeSave, UI.scopeRestore, UI.scopeNarrow].forEach((control) => {
-        if (control) control.disabled = true;
+function bind() {
+    $("btn-reload").addEventListener("click", refreshPage);
+    $("toggle-soter").addEventListener("change", onSoterToggle);
+    $("toggle-soter-certs").addEventListener("change", onCertsToggle);
+    $("keybox-select").addEventListener("change", (event) => { state.keybox.pick = event.target.value; });
+    $("btn-apply-keybox").addEventListener("click", onApplyKeybox);
+    $("toggle-kbu").addEventListener("change", onKbuToggle);
+    $("btn-kbu-save").addEventListener("click", onKbuSave);
+    $("btn-kbu-now").addEventListener("click", onKbuNow);
+    $("kbu-source").addEventListener("change", () => {
+        $("kbu-custom-row").hidden = $("kbu-source").value !== "custom";
     });
-    UI.patchMode.querySelectorAll("button").forEach((button) => { button.disabled = true; });
-    applyBackendMode();
-    Snow.init();
+    $("toggle-hide-bl").addEventListener("change", onHideBlToggle);
+    $("toggle-auto-target").addEventListener("change", onAutoTargetToggle);
+    Array.prototype.forEach.call($("patch-mode").querySelectorAll(".seg-btn"), (button) => {
+        button.addEventListener("click", () => onPatchMode(button.dataset.mode));
+    });
+    $("btn-apply-patch").addEventListener("click", onApplyPatch);
+    $("compat-run").addEventListener("click", runCompat);
+    $("compat-toggle").addEventListener("click", () => {
+        state.compat.showAll = !state.compat.showAll;
+        renderCompat();
+    });
+    $("toggle-debug").addEventListener("change", onDebugToggle);
+    $("btn-export-logs").addEventListener("click", onExportLogs);
+    $("btn-copy-path").addEventListener("click", onCopyPath);
+    $("toggle-key-takeover").addEventListener("change", onTakeoverToggle);
+    ScopeCard.init();
+    TEEI18N.onChange(renderAll);
+}
+
+async function start() {
+    TEEI18N.start();
     Appearance.init();
     bind();
-    document.getElementById("btn-reload").onclick = refreshPage;
+    renderAll();
+    document.documentElement.classList.remove("booting");
     await refreshPage();
+    startKeyboxPoll();
 }
 
-document.addEventListener("DOMContentLoaded", onReady);
-
-/* ---- diagnostics: verbose logging toggle + log export ------------------- */
-(function diagnostics() {
-    const toggle = document.getElementById("toggle-debug");
-    const button = document.getElementById("btn-export-logs");
-    const sub = document.getElementById("diag-sub");
-    const hint = document.getElementById("diag-hint");
-    if (!toggle || !button || !sub) return;
-
-    if (!Backend.isKsu()) {
-        /* the native (Ultra) backend has no log endpoint; stay honest about it */
-        sub.textContent = "仅 KernelSU 后端支持";
-        button.disabled = true;
-        toggle.disabled = true;
-        return;
-    }
-
-    const setBusy = (busy) => {
-        button.disabled = busy;
-        toggle.disabled = busy;
-    };
-
-    const refresh = async () => {
-        try {
-            const data = await Backend.call("get debug");
-            toggle.checked = !!(data && data.enabled);
-            sub.textContent = toggle.checked ? "已开启 · 记录更详细的日志" : "已关闭 · 仅记录关键事件";
-            toggle.disabled = false;
-            button.disabled = false;
-        } catch (err) {
-            const described = Backend.describe(err);
-            sub.textContent = described.text;
-            toggle.disabled = true;
-            button.disabled = true;
-        }
-    };
-
-    toggle.addEventListener("change", async () => {
-        const want = toggle.checked;
-        setBusy(true);
-        try {
-            await Backend.call("set debug", want ? "1" : "0");
-            sub.textContent = want ? "已开启 · 记录更详细的日志" : "已关闭 · 仅记录关键事件";
-            if (typeof showToast === "function") showToast(want ? "详细日志已开启" : "详细日志已关闭");
-        } catch (err) {
-            toggle.checked = !want;
-            sub.textContent = Backend.describe(err).text;
-        } finally {
-            setBusy(false);
-        }
-    });
-
-    button.addEventListener("click", async () => {
-        setBusy(true);
-        const previous = sub.textContent;
-        sub.textContent = "正在导出…";
-        try {
-            const result = await Backend.call("logs");
-            const path = (result && result.path) || "";
-            const bytes = (result && result.bytes) || 0;
-            sub.textContent = path ? "已导出：" + path : "已导出";
-            if (hint) {
-                hint.textContent = path
-                    ? "文件大小 " + bytes + " 字节。提交前请再检查一遍，确认没有个人信息。"
-                    : "导出完成，但未返回路径。";
-            }
-            if (path && navigator.clipboard) {
-                navigator.clipboard.writeText(path).catch(() => {});
-            }
-            if (typeof showToast === "function") showToast("日志已导出");
-        } catch (err) {
-            sub.textContent = Backend.describe(err).text;
-        } finally {
-            setBusy(false);
-            if (sub.textContent === "正在导出…") sub.textContent = previous;
-        }
-    });
-
-    refresh();
-})();
-
-/* KeyBox state is owned by the backend (webui.sh / native endpoint); poll it so a
-   keybox added or replaced outside the WebUI shows up without a manual refresh. */
-(function watchKeyboxState() {
-    if (document.visibilityState === "hidden") return;
-    loadKeyboxes().catch(() => {});
-    setTimeout(watchKeyboxState, 10000);
-})();
-
-/* ---- experimental: force target apps to regenerate stale keys ------------- */
-(function keyTakeover() {
-    const toggle = document.getElementById("toggle-key-takeover");
-    const sub = document.getElementById("takeover-sub");
-    if (!toggle || !sub) return;
-    if (!Backend.isKsu()) {
-        sub.textContent = "仅 KernelSU 后端支持";
-        return;
-    }
-    const set = (on) => {
-        sub.textContent = on ? "已开启 · 未知 KeyId 返回 KEY_NOT_FOUND" : "已关闭 · 未知 KeyId 转发真实 HAL";
-        toggle.checked = on;
-        toggle.disabled = false;
-    };
-    const load = async () => {
-        try {
-            const value = String(await Backend.call("get key_takeover")).trim();
-            set(value === "1" || value.toLowerCase() === "true");
-        } catch (err) {
-            sub.textContent = Backend.describe(err).text;
-            toggle.disabled = true;
-        }
-    };
-    toggle.addEventListener("change", async () => {
-        const want = toggle.checked;
-        toggle.disabled = true;
-        try {
-            await Backend.call("set key_takeover", want ? "1" : "0");
-            set(want);
-            if (typeof showToast === "function") showToast(want ? "已开启强制重建（实验）" : "已关闭强制重建");
-        } catch (err) {
-            sub.textContent = Backend.describe(err).text;
-            toggle.checked = !want;
-        } finally {
-            toggle.disabled = false;
-        }
-    });
-    load();
-})();
+document.addEventListener("DOMContentLoaded", start);

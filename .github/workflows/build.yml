@@ -46,6 +46,14 @@ jobs:
             echo "node not installed, skipping"
           fi
 
+      - name: WebUI translations, file lists and contrast
+        run: |
+          if command -v node >/dev/null 2>&1; then
+            node tools/check_webroot.js
+          else
+            echo "node not installed, skipping"
+          fi
+
       - name: Compatibility check tests
         run: bash tools/test_compat.sh
 

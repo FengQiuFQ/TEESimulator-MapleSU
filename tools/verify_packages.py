@@ -78,9 +78,9 @@ ULTRA_WEBROOT_EXPECTED = [
     "webroot/index.html",
     "webroot/main.js",
     "webroot/request.js",
+    "webroot/i18n.js",
+    "webroot/locales.js",
     "webroot/style.css",
-    "webroot/toast.css",
-    "webroot/toast.js",
 ]
 
 # 6.0.10: the KSU runtime is flat, exactly like the upstream module. The WebUI

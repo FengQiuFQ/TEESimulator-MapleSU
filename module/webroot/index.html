@@ -1,327 +1,349 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-style="miuix" data-scheme="light">
+<html lang="en" class="booting" data-theme="autumn" data-scheme="light">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="color-scheme" content="light dark">
     <script>
+        /* Runs before first paint so the saved theme never flashes. The manager that
+           hosts this page can set the scheme and colours through MapleSUAppearance. */
         (function () {
-            var r = document.documentElement, style = 'miuix', scheme = 'auto';
-            try { style = localStorage.getItem('maplesu-tee-style') || style;
-                scheme = localStorage.getItem('maplesu-tee-scheme') || scheme; } catch (e) {}
-            if (window.MapleSUAppearance) {
-                style = window.MapleSUAppearance.style; scheme = window.MapleSUAppearance.scheme;
-                Object.keys(window.MapleSUAppearance.colors).forEach(function (key) {
-                    r.style.setProperty(key, window.MapleSUAppearance.colors[key]);
-                });
+            var root = document.documentElement, host = window.MapleSUAppearance;
+            var theme = 'autumn', scheme = 'auto';
+            try {
+                theme = localStorage.getItem('maplesu-tee-theme') || theme;
+                scheme = localStorage.getItem('maplesu-tee-scheme') || scheme;
+            } catch (e) {}
+            if (!/^(spring|summer|autumn|winter)$/.test(theme)) theme = 'autumn';
+            if (host && host.scheme) scheme = host.scheme;
+            if (scheme !== 'light' && scheme !== 'dark') {
+                scheme = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
             }
-            r.dataset.style = style === 'material' ? 'material' : 'miuix';
-            r.dataset.scheme = scheme === 'auto' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : scheme;
+            root.setAttribute('data-theme', theme);
+            root.setAttribute('data-scheme', scheme);
+            /* A manager may still send the token names of earlier versions, and the accent
+               tint used to follow the accent, so sending only the accent has to keep working. */
+            var renamed = { '--error': '--err', '--green': '--ok', '--red-soft': '--accent-bg' };
+            window.teeHostColors = function (colors) {
+                Object.keys(colors).forEach(function (key) { root.style.setProperty(renamed[key] || key, colors[key]); });
+                if (colors['--accent'] && !colors['--accent-bg'] && !colors['--red-soft']) {
+                    root.style.setProperty('--accent-bg', 'color-mix(in srgb, ' + colors['--accent'] + ' 12%, transparent)');
+                }
+            };
+            if (host && host.colors) window.teeHostColors(host.colors);
+            /* If startup fails, show the page rather than leave it blank. */
+            var reveal = function () { root.classList.remove('booting'); };
+            window.addEventListener('error', reveal);
+            window.addEventListener('unhandledrejection', reveal);
         })();
     </script>
-    <title>TEE 模拟器 · MapleSU</title>
+    <title>MapleSU</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="toast.css">
+    <script src="i18n.js"></script>
+    <script src="locales.js"></script>
 </head>
 
 <body>
-    <canvas id="snow" aria-hidden="true"></canvas>
+    <svg class="sprite" width="0" height="0" aria-hidden="true">
+        <symbol id="leaf" viewBox="0 0 24 24">
+            <path d="M12 1.5 13.7 5.2 16.2 4.2 15.4 8.6 18.2 6.8 19.5 9.5 22.5 9.1 21 12.6 22.4 13.6 17.8 17.4 18.3 19.6 12.9 18.9 13.1 22.8H10.9L11.1 18.9 5.7 19.6 6.2 17.4 1.6 13.6 3 12.6 1.5 9.1 4.5 9.5 5.8 6.8 8.6 8.6 7.8 4.2 10.3 5.2Z"/>
+        </symbol>
+        <symbol id="icon-settings" viewBox="0 0 24 24">
+            <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4 7h9M19 7h1M4 17h1M11 17h9"/>
+            <circle fill="none" stroke="currentColor" stroke-width="1.8" cx="16" cy="7" r="2.6"/>
+            <circle fill="none" stroke="currentColor" stroke-width="1.8" cx="8" cy="17" r="2.6"/>
+        </symbol>
+        <symbol id="icon-refresh" viewBox="0 0 24 24">
+            <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 3.5v4h-4"/>
+        </symbol>
+    </svg>
+    <svg class="bg-leaf" aria-hidden="true"><use href="#leaf"></use></svg>
 
     <main class="shell">
-        <!-- 品牌头 -->
-        <header class="brand">
-            <div class="brand-mark" aria-hidden="true"><span>TE</span></div>
+        <header class="topbar">
+            <svg class="brand-leaf" aria-hidden="true"><use href="#leaf"></use></svg>
             <div class="brand-text">
-                <h1>TEE 模拟器</h1>
-                <p>密钥与证书管理<span class="dot-sep">·</span><span id="module-version">读取中…</span></p>
+                <h1 data-i18n="app.title"></h1>
+                <code id="module-version"></code>
             </div>
-            <div class="brand-actions">
-                <div class="lang-switch" id="lang-switch" role="group" aria-label="语言 / Language">
-                    <button type="button" data-lang="zh" aria-pressed="true">中</button>
-                    <button type="button" data-lang="en" aria-pressed="false">EN</button>
-                </div>
-                <button id="btn-theme" class="snow-btn" type="button" aria-label="界面风格">◐</button>
-                <button id="btn-snow" class="snow-btn" type="button" aria-pressed="true" aria-label="枫叶飘落" title="枫叶飘落">叶</button>
-            </div>
+            <button id="btn-reload" class="icon-btn" type="button" data-i18n-aria-label="app.refresh" data-i18n-title="app.refresh">
+                <svg aria-hidden="true"><use href="#icon-refresh"></use></svg>
+            </button>
+            <button id="btn-settings" class="icon-btn" type="button" data-i18n-aria-label="app.settings" data-i18n-title="app.settings">
+                <svg aria-hidden="true"><use href="#icon-settings"></use></svg>
+            </button>
         </header>
 
-        <div class="load-status" role="status"><span id="page-state">正在读取模块设置…</span>
-            <span class="tag tag-outline" id="backend-mode">检测中</span>
-            <button id="btn-reload" type="button" class="text-btn">刷新</button></div>
-        <p class="load-detail" id="page-detail" hidden></p>
-
-        <div class="alert-warn" id="keybox-warning" role="alert" hidden>
-            <b>内置 Keybox 密钥未配置</b>
-            <span>TEE 模块不生效。请把 keybox.xml 放到 /data/adb/tricky_store/keybox.xml</span>
+        <div class="statusline" role="status">
+            <span id="page-state" class="statusline-text"></span>
+            <span id="backend-mode" class="chip"></span>
         </div>
-        <!-- SOTER 伪造 -->
-        <section class="card">
-            <div class="card-head">
-                <span class="card-icon">S</span>
-                <h2>SOTER 兼容</h2>
-                <span class="tag" id="soter-tag">读取中</span>
-            </div>
-            <p class="card-desc">为使用 SOTER 的应用提供兼容支持。关闭后保留设备原有行为。</p>
-            <div class="row">
-                <div class="row-main">
-                    <div class="row-title">启用 SOTER 兼容</div>
-                    <div class="row-sub" id="soter-sub">读取中…</div>
-                </div>
-                <label class="switch">
-                    <input type="checkbox" id="toggle-soter" aria-label="启用 SOTER 兼容" disabled>
-                    <span class="track"><span class="thumb"></span></span>
-                </label>
-            </div>
-            <p class="hint">更改后重启设备生效。</p>
-            <div class="row">
-                <div class="row-main">
-                    <div class="row-title">证书链（SOTER certs）</div>
-                    <div class="row-sub" id="soter-certs-sub">读取中…</div>
-                </div>
-                <label class="switch">
-                    <input type="checkbox" id="toggle-soter-certs" aria-label="启用 SOTER 证书链" disabled>
-                    <span class="track"><span class="thumb"></span></span>
-                </label>
-            </div>
-            <p class="hint" id="soter-certs-hint">读取中…</p>
-        </section>
+        <p id="page-detail" class="status-detail" hidden></p>
 
-        <!-- KeyBox -->
-        <section class="card">
-            <div class="card-head">
-                <span class="card-icon">K</span>
-                <h2>KeyBox</h2>
-                <span class="tag tag-outline" id="keybox-active-tag">当前生效</span>
-            </div>
-            <div class="kv">
-                <span>当前生效</span>
-                <b id="keybox-active">—</b>
-            </div>
-            <div class="kv">
-                <span>摘要</span>
-                <code id="keybox-sha">—</code>
-            </div>
-            <div class="field">
-                <label for="keybox-select">切换内置 KeyBox</label>
-                <div class="field-row">
-                    <div class="select-wrap">
-                        <select id="keybox-select"></select>
+        <div id="keybox-warning" class="banner" role="alert" hidden>
+            <b data-i18n="keybox.warnTitle"></b>
+            <span id="keybox-warning-body"></span>
+        </div>
+
+        <div class="columns">
+            <div class="col">
+                <section id="compat-card" class="card" hidden>
+                    <div class="card-head">
+                        <h2 data-i18n="compat.title"></h2>
+                        <span id="compat-chip" class="chip" hidden></span>
                     </div>
-                    <button type="button" class="btn btn-primary" id="btn-apply-keybox">应用</button>
-                </div>
-            </div>
-            <p class="hint">选择预置密钥并应用，更改后重启设备生效。</p>
-        </section>
-
-        <!-- Optional controls are shown only when the running module supports their routes. -->
-        <section class="card" id="keybox-updates" hidden>
-            <div class="card-head">
-                <span class="card-icon">U</span>
-                <h2>证书自动更新</h2>
-                <span class="tag tag-outline" id="kbupd-tag">未启用</span>
-            </div>
-            <p class="card-desc">按设定间隔检查证书更新。下载或校验失败时，继续保留原有证书。</p>
-            <div class="row">
-                <div class="row-main">
-                    <div class="row-title">启用自动更新</div>
-                    <div class="row-sub" id="kbupd-sub">未启用 · 仅手动更新</div>
-                </div>
-                <label class="switch">
-                    <input type="checkbox" id="toggle-kbupd" aria-label="启用证书自动更新" disabled>
-                    <span class="track"><span class="thumb"></span></span>
-                </label>
-            </div>
-            <div class="field">
-                <label for="kbupd-source">更新源</label>
-                <div class="field-row">
-                    <div class="select-wrap">
-                        <select id="kbupd-source"></select>
+                    <p id="compat-summary" class="desc" hidden></p>
+                    <ul id="compat-list" class="checks"></ul>
+                    <p id="compat-time" class="hint" hidden></p>
+                    <div class="btn-row">
+                        <button id="compat-run" type="button" class="btn" data-i18n="compat.recheck"></button>
+                        <button id="compat-toggle" type="button" class="btn btn-quiet" hidden></button>
                     </div>
-                </div>
-                <div class="field-row" id="kbupd-custom-row">
-                    <input type="url" id="kbupd-custom-url" class="input" inputmode="url"
-                        placeholder="https://example.com/keybox.xml" autocomplete="off" spellcheck="false">
-                </div>
-                <div class="field-row">
-                    <input type="number" id="kbupd-interval" class="input" min="0" max="8760" step="1"
-                        inputmode="numeric" placeholder="间隔小时">
-                    <button type="button" class="btn btn-primary" id="btn-kbupd-save">保存</button>
-                </div>
-                <div class="field-row">
-                    <button type="button" class="btn btn-primary" id="btn-kbupd-now">立即更新</button>
-                </div>
-            </div>
-            <div class="kv"><span>上次检查</span><b id="kbupd-last">—</b></div>
-            <div class="kv"><span>结果</span><b id="kbupd-result">—</b></div>
-            <div class="kv"><span>下次计划</span><b id="kbupd-next">—</b></div>
-            <div class="kv"><span>实际地址</span><code id="kbupd-url">—</code></div>
-            <p class="hint">
-                填 0 表示每次开机检查。更新成功后，重启设备生效。
-            </p>
-        </section>
+                </section>
 
-        <!-- Soter 接管范围 -->
-        <section class="card" id="soter-scope">
-            <div class="card-head">
-                <span class="card-icon">R</span>
-                <h2>Soter 接管范围</h2>
-                <span class="tag" id="scope-tag">读取中</span>
-            </div>
-            <p class="card-desc">选择由模块接管 SOTER 服务的应用。默认接管全部应用，也可以收窄到指定应用。</p>
-            <div class="scope-alert" id="scope-alert" hidden>
-                <div class="scope-alert-text" id="scope-alert-text">当前 = 全部应用接管（默认）</div>
-                <button type="button" class="btn btn-primary" id="scope-narrow">收窄到选中应用</button>
-            </div>
-            <div class="field-row">
-                <input type="search" id="scope-search" class="input" placeholder="搜索应用名或包名"
-                    autocomplete="off" spellcheck="false" enterkeyhint="search" aria-label="搜索应用">
-            </div>
-            <div class="scope-actions">
-                <button type="button" class="btn" id="scope-select-all">全选</button>
-                <button type="button" class="btn" id="scope-invert">反选</button>
-                <button type="button" class="btn" id="scope-clear">清空</button>
-            </div>
-            <div class="kv"><span>已选</span><b id="scope-count">0 / 共 0</b></div>
-            <div class="scope-list" id="scope-list" role="list" aria-label="应用列表"></div>
-            <div class="scope-empty" id="scope-empty" hidden>没有匹配的应用</div>
-            <p class="scope-error" id="scope-error" hidden></p>
-            <div class="field-row">
-                <button type="button" class="btn btn-primary" id="scope-save">保存</button>
-                <button type="button" class="btn" id="scope-restore">恢复全放行</button>
-                <button type="button" class="btn" id="scope-retry" hidden>重试</button>
-            </div>
-            <p class="hint" id="scope-hint">选中后点保存，「恢复全放行」回到默认（全部应用）。</p>
-        </section>
+                <section id="keybox-card" class="card">
+                    <div class="card-head">
+                        <h2 data-i18n="keybox.title"></h2>
+                        <span id="keybox-chip" class="chip" hidden></span>
+                    </div>
+                    <div class="kv"><span data-i18n="keybox.active"></span><b id="keybox-active"></b></div>
+                    <div class="kv"><span data-i18n="keybox.digest"></span><code id="keybox-sha"></code></div>
+                    <div class="field">
+                        <label for="keybox-select" data-i18n="keybox.switch"></label>
+                        <div class="input-row">
+                            <select id="keybox-select" class="input" disabled></select>
+                            <button id="btn-apply-keybox" type="button" class="btn btn-primary" data-i18n="common.apply" disabled></button>
+                        </div>
+                    </div>
+                    <p class="hint" data-i18n="keybox.hint"></p>
+                </section>
 
-        <!-- 系统伪装 -->
-        <section class="card">
-            <div class="card-head">
-                <span class="card-icon">H</span>
-                <h2>系统伪装</h2>
-            </div>
-            <div class="row">
-                <div class="row-main">
-                    <div class="row-title">解锁状态兼容</div>
-                    <div class="row-sub" id="hide-bl-sub">使用模块已有的设备状态兼容设置</div>
-                </div>
-                <label class="switch">
-                    <input type="checkbox" id="toggle-hide-bl" aria-label="设备状态兼容">
-                    <span class="track"><span class="thumb"></span></span>
-                </label>
-            </div>
-            <div class="row">
-                <div class="row-main">
-                    <div class="row-title">自动维护应用列表</div>
-                    <div class="row-sub" id="target-sub">安装或卸载应用后自动更新列表</div>
-                </div>
-                <label class="switch">
-                    <input type="checkbox" id="toggle-auto-target" aria-label="自动维护应用列表">
-                    <span class="track"><span class="thumb"></span></span>
-                </label>
-            </div>
-            <div class="row" id="row-fix-tee">
-                <div class="row-main">
-                    <div class="row-title">TEE 修复</div>
-                    <div class="row-sub" id="fix-tee-sub">未实现 · TEE 判定由运行时 KeyStore 探针决定，无需开关</div>
-                </div>
-                <label class="switch">
-                    <input type="checkbox" id="toggle-fix-tee" aria-label="TEE 修复" disabled>
-                    <span class="track"><span class="thumb"></span></span>
-                </label>
-            </div>
-        </section>
+                <section id="kbu-card" class="card" hidden>
+                    <div class="card-head">
+                        <h2 data-i18n="kbu.title"></h2>
+                        <span id="kbu-chip" class="chip" hidden></span>
+                    </div>
+                    <p class="desc" data-i18n="kbu.desc"></p>
+                    <div class="row">
+                        <div class="row-main">
+                            <div class="row-title" data-i18n="kbu.enable"></div>
+                            <div id="kbu-sub" class="row-sub"></div>
+                        </div>
+                        <label class="switch">
+                            <input id="toggle-kbu" type="checkbox" role="switch" data-i18n-aria-label="kbu.enable" disabled>
+                            <span class="track"><span class="thumb"></span></span>
+                        </label>
+                    </div>
+                    <p id="kbu-zero-warn" class="note note-warn" data-i18n="kbu.zeroWarn" hidden></p>
+                    <div class="field">
+                        <label for="kbu-source" data-i18n="kbu.source"></label>
+                        <select id="kbu-source" class="input" disabled></select>
+                    </div>
+                    <div id="kbu-custom-row" class="field" hidden>
+                        <label for="kbu-custom-url" data-i18n="kbu.customUrl"></label>
+                        <input id="kbu-custom-url" type="url" class="input input-mono" inputmode="url" dir="ltr"
+                            placeholder="https://example.com/keybox.xml" autocomplete="off" spellcheck="false" disabled>
+                    </div>
+                    <div class="field">
+                        <label for="kbu-interval" data-i18n="kbu.interval"></label>
+                        <div class="input-row">
+                            <input id="kbu-interval" type="number" class="input" min="0" max="8760" step="1" inputmode="numeric" disabled>
+                            <button id="btn-kbu-save" type="button" class="btn btn-primary" data-i18n="common.save" disabled></button>
+                        </div>
+                    </div>
+                    <div class="kv"><span data-i18n="kbu.last"></span><b id="kbu-last"></b></div>
+                    <div class="kv"><span data-i18n="kbu.result"></span><b id="kbu-result"></b></div>
+                    <div class="kv"><span data-i18n="kbu.next"></span><b id="kbu-next"></b></div>
+                    <div class="kv"><span data-i18n="kbu.url"></span><code id="kbu-url" dir="ltr"></code></div>
+                    <div class="btn-row">
+                        <button id="btn-kbu-now" type="button" class="btn" data-i18n="kbu.now" disabled></button>
+                    </div>
+                    <p id="kbu-hint" class="hint"></p>
+                </section>
 
-        <!-- 安全补丁 -->
-        <section class="card">
-            <div class="card-head">
-                <span class="card-icon">P</span>
-                <h2>安全补丁日期</h2>
+                <section id="patch-card" class="card">
+                    <div class="card-head"><h2 data-i18n="patch.title"></h2></div>
+                    <p class="desc" data-i18n="patch.desc"></p>
+                    <div id="patch-mode" class="seg" role="group" data-i18n-aria-label="patch.title">
+                        <button type="button" class="seg-btn" data-mode="auto" data-i18n="patch.modeAuto" disabled></button>
+                        <button type="button" class="seg-btn" data-mode="fixed" data-i18n="patch.modeFixed" disabled></button>
+                    </div>
+                    <div id="patch-fixed-row" class="field" hidden>
+                        <label for="patch-date" data-i18n="patch.date"></label>
+                        <div class="input-row">
+                            <input id="patch-date" type="date" class="input" disabled>
+                            <button id="btn-apply-patch" type="button" class="btn btn-primary" data-i18n="common.apply" disabled></button>
+                        </div>
+                    </div>
+                    <div class="kv"><span data-i18n="patch.device"></span><code id="patch-device"></code></div>
+                    <div class="kv"><span data-i18n="patch.effective"></span><code id="patch-effective"></code></div>
+                    <p class="hint" data-i18n="patch.hint"></p>
+                </section>
             </div>
-            <p class="card-desc">跟随设备的安全补丁日期，或为后续签发的证书指定日期。</p>
-            <div class="seg" id="patch-mode">
-                <button type="button" class="seg-btn" data-mode="auto">自动跟随设备</button>
-                <button type="button" class="seg-btn" data-mode="fixed">固定日期</button>
-            </div>
-            <div class="field-row" id="patch-fixed-row">
-                <input type="date" id="patch-date" class="input">
-                <button type="button" class="btn btn-primary" id="btn-apply-patch">应用</button>
-            </div>
-            <div class="kv">
-                <span>设备实际补丁</span>
-                <b id="patch-device">—</b>
-            </div>
-            <div class="kv">
-                <span>当前生效</span>
-                <b id="patch-effective">—</b>
-            </div>
-            <p class="hint">更改仅影响后续签发的证书。</p>
-        </section>
 
-        <!-- 版本信息 -->
-        <details class="card card-flat">
-            <summary>关于 TEE 模拟器<span class="summary-arrow" aria-hidden="true">›</span></summary>
-            <div class="kv"><span>模块版本</span><b id="ver-version">—</b></div>
-            <div class="kv"><span>作者</span><b id="ver-author">—</b></div>
-            <div class="kv"><span>DEX 摘要</span><code id="ver-dex">—</code></div>
-            <div class="kv"><span>KeyBox 摘要</span><code id="ver-keybox">—</code></div>
-            <div class="kv"><span>构建</span><code id="ver-build">—</code></div>
-        </details>
+            <div class="col">
+                <section id="soter-card" class="card">
+                    <div class="card-head">
+                        <h2 data-i18n="soter.title"></h2>
+                        <span id="soter-chip" class="chip" hidden></span>
+                    </div>
+                    <p class="desc" data-i18n="soter.desc"></p>
+                    <div class="row">
+                        <div class="row-main">
+                            <div class="row-title" data-i18n="soter.enable"></div>
+                            <div id="soter-sub" class="row-sub"></div>
+                        </div>
+                        <label class="switch">
+                            <input id="toggle-soter" type="checkbox" role="switch" data-i18n-aria-label="soter.enable" disabled>
+                            <span class="track"><span class="thumb"></span></span>
+                        </label>
+                    </div>
+                    <div class="row">
+                        <div class="row-main">
+                            <div class="row-title" data-i18n="soter.certs"></div>
+                            <div id="soter-certs-sub" class="row-sub"></div>
+                        </div>
+                        <label class="switch">
+                            <input id="toggle-soter-certs" type="checkbox" role="switch" data-i18n-aria-label="soter.certs" disabled>
+                            <span class="track"><span class="thumb"></span></span>
+                        </label>
+                    </div>
+                    <p id="soter-certs-hint" class="hint"></p>
+                </section>
 
-        <!-- 诊断 -->
-        <details class="card card-flat" id="diag-card">
-            <summary>诊断与日志<span class="summary-arrow" aria-hidden="true">›</span></summary>
-            <div class="row">
-                <div class="row-main">
-                    <div class="row-title">详细日志</div>
-                    <div class="row-sub" id="diag-sub">读取中…</div>
-                </div>
-                <input type="checkbox" id="toggle-debug" aria-label="启用详细日志" disabled>
+                <section id="scope-card" class="card">
+                    <div class="card-head">
+                        <h2 data-i18n="scope.title"></h2>
+                        <span id="scope-chip" class="chip" hidden></span>
+                    </div>
+                    <p class="desc" data-i18n="scope.desc"></p>
+                    <div id="scope-alert" class="note" hidden>
+                        <span data-i18n="scope.allAlert"></span>
+                        <button id="scope-narrow" type="button" class="btn btn-small" disabled></button>
+                    </div>
+                    <input id="scope-search" type="search" class="input" data-i18n-placeholder="scope.search"
+                        data-i18n-aria-label="scope.search" autocomplete="off" spellcheck="false" enterkeyhint="search" disabled>
+                    <div class="kv kv-tight"><span data-i18n="scope.selected"></span><b id="scope-count"></b></div>
+                    <div class="seg seg-actions" role="group" data-i18n-aria-label="scope.selected">
+                        <button id="scope-select-all" type="button" class="seg-btn" data-i18n="scope.selectAll" disabled></button>
+                        <button id="scope-invert" type="button" class="seg-btn" data-i18n="scope.invert" disabled></button>
+                        <button id="scope-clear" type="button" class="seg-btn" data-i18n="scope.clear" disabled></button>
+                    </div>
+                    <div id="scope-list" class="scope-list" role="list" data-i18n-aria-label="scope.list"></div>
+                    <p id="scope-empty" class="hint" hidden></p>
+                    <div class="btn-row">
+                        <button id="scope-save" type="button" class="btn btn-primary" data-i18n="common.save" disabled></button>
+                        <button id="scope-restore" type="button" class="btn" data-i18n="scope.restore" disabled></button>
+                    </div>
+                    <p class="hint" data-i18n="scope.hint"></p>
+                </section>
+
+                <section id="system-card" class="card">
+                    <div class="card-head"><h2 data-i18n="system.title"></h2></div>
+                    <div class="row">
+                        <div class="row-main">
+                            <div class="row-title" data-i18n="system.hideBl"></div>
+                            <div id="hide-bl-sub" class="row-sub"></div>
+                        </div>
+                        <label class="switch">
+                            <input id="toggle-hide-bl" type="checkbox" role="switch" data-i18n-aria-label="system.hideBl" disabled>
+                            <span class="track"><span class="thumb"></span></span>
+                        </label>
+                    </div>
+                    <div class="row">
+                        <div class="row-main">
+                            <div class="row-title" data-i18n="system.auto"></div>
+                            <div id="target-sub" class="row-sub"></div>
+                        </div>
+                        <label class="switch">
+                            <input id="toggle-auto-target" type="checkbox" role="switch" data-i18n-aria-label="system.auto" disabled>
+                            <span class="track"><span class="thumb"></span></span>
+                        </label>
+                    </div>
+                </section>
+
+                <details id="diag-card" class="card">
+                    <summary data-i18n="diag.title"></summary>
+                    <div class="row">
+                        <div class="row-main">
+                            <div class="row-title" data-i18n="diag.debug"></div>
+                            <div id="diag-sub" class="row-sub"></div>
+                        </div>
+                        <label class="switch">
+                            <input id="toggle-debug" type="checkbox" role="switch" data-i18n-aria-label="diag.debug" disabled>
+                            <span class="track"><span class="thumb"></span></span>
+                        </label>
+                    </div>
+                    <div class="btn-row">
+                        <button id="btn-export-logs" type="button" class="btn" data-i18n="diag.export" disabled></button>
+                        <button id="btn-copy-path" type="button" class="btn btn-quiet" data-i18n="diag.copy" hidden></button>
+                    </div>
+                    <p id="diag-result" class="value-line" hidden></p>
+                    <p id="diag-hint" class="hint"></p>
+                </details>
+
+                <details id="takeover-card" class="card">
+                    <summary data-i18n="exp.title"></summary>
+                    <div class="row">
+                        <div class="row-main">
+                            <div class="row-title" data-i18n="exp.takeover"></div>
+                            <div id="takeover-sub" class="row-sub"></div>
+                        </div>
+                        <label class="switch">
+                            <input id="toggle-key-takeover" type="checkbox" role="switch" data-i18n-aria-label="exp.takeover" disabled>
+                            <span class="track"><span class="thumb"></span></span>
+                        </label>
+                    </div>
+                    <p class="hint" data-i18n="exp.takeoverHint"></p>
+                </details>
+
+                <details id="about-card" class="card">
+                    <summary data-i18n="about.title"></summary>
+                    <div class="kv"><span data-i18n="about.version"></span><code id="ver-version"></code></div>
+                    <div class="kv"><span data-i18n="about.author"></span><b id="ver-author"></b></div>
+                    <div class="kv"><span data-i18n="about.dex"></span><code id="ver-dex"></code></div>
+                    <div class="kv"><span data-i18n="about.keybox"></span><code id="ver-keybox"></code></div>
+                    <div class="kv"><span data-i18n="about.build"></span><code id="ver-build"></code></div>
+                    <div class="kv"><span data-i18n="about.backend"></span><b id="ver-backend"></b></div>
+                </details>
             </div>
-            <button type="button" class="btn btn-primary" id="btn-export-logs" disabled>导出诊断日志</button>
-            <p class="hint" id="diag-hint">导出到 /sdcard/Download，自动打码序列号；提交前请再检查一遍。</p>
-        </details>
-
-        <!-- 实验功能 -->
-        <details class="card card-flat" id="takeover-card">
-            <summary>实验功能<span class="summary-arrow" aria-hidden="true">›</span></summary>
-            <div class="row">
-                <div class="row-main">
-                    <div class="row-title">强制重建目标应用密钥（实验）</div>
-                    <div class="row-sub" id="takeover-sub">读取中…</div>
-                </div>
-                <input type="checkbox" id="toggle-key-takeover" aria-label="强制重建目标应用密钥" disabled>
-            </div>
-            <p class="hint">开启后，target.txt 内的应用访问本模块未创建的密钥时会收到
-                KEY_NOT_FOUND，被迫重新生成密钥并走模拟路径。原有密钥可能因此不可用。</p>
-        </details>
-
-        <footer class="foot">
-            <p>MapleSU · TEE 模拟器</p>
-            <p class="foot-sub">
-                设置保存在设备上，更改后按提示重启生效。
-            </p>
-        </footer>
+        </div>
     </main>
 
-    <dialog id="appearance-dialog" aria-labelledby="appearance-title">
-        <h2 id="appearance-title">界面风格</h2>
-        <p class="card-desc" id="appearance-summary">选择适合你的使用方式。</p>
-        <div class="appearance-options" id="style-choice">
-            <button type="button" data-value="miuix"><b>Miuix</b><span>细腻通透，轻盈有质感</span></button>
-            <button type="button" data-value="material"><b>Material</b><span>简洁克制，专注内容</span></button>
-        </div>
-        <div class="seg" id="scheme-choice" aria-label="明暗配色">
-            <button type="button" class="seg-btn" data-value="auto">跟随系统</button>
-            <button type="button" class="seg-btn" data-value="light">浅色</button>
-            <button type="button" class="seg-btn" data-value="dark">深色</button>
-        </div>
-        <button type="button" id="btn-theme-done" class="btn btn-primary">完成</button>
-    </dialog>
-    <div id="toast" class="toast" role="status"></div>
+    <dialog id="settings-dialog" aria-labelledby="settings-title">
+        <h2 id="settings-title" data-i18n="settings.title"></h2>
+        <p id="settings-hosted" class="hint" data-i18n="settings.hosted" hidden></p>
 
-    <script src="i18n.js"></script>
-    <script src="toast.js"></script>
+        <div class="field">
+            <div class="field-label" id="season-label" data-i18n="settings.season"></div>
+            <div id="season-choice" class="seasons" role="group" aria-labelledby="season-label">
+                <button type="button" class="season" data-value="spring"><svg class="season-leaf" aria-hidden="true"><use href="#leaf"></use></svg><span data-i18n="season.spring"></span></button>
+                <button type="button" class="season" data-value="summer"><svg class="season-leaf" aria-hidden="true"><use href="#leaf"></use></svg><span data-i18n="season.summer"></span></button>
+                <button type="button" class="season" data-value="autumn"><svg class="season-leaf" aria-hidden="true"><use href="#leaf"></use></svg><span data-i18n="season.autumn"></span></button>
+                <button type="button" class="season" data-value="winter"><svg class="season-leaf" aria-hidden="true"><use href="#leaf"></use></svg><span data-i18n="season.winter"></span></button>
+            </div>
+        </div>
+
+        <div class="field">
+            <div class="field-label" id="scheme-label" data-i18n="settings.scheme"></div>
+            <div id="scheme-choice" class="seg" role="group" aria-labelledby="scheme-label">
+                <button type="button" class="seg-btn" data-value="auto" data-i18n="scheme.auto"></button>
+                <button type="button" class="seg-btn" data-value="light" data-i18n="scheme.light"></button>
+                <button type="button" class="seg-btn" data-value="dark" data-i18n="scheme.dark"></button>
+            </div>
+        </div>
+
+        <div class="field">
+            <label for="language-select" data-i18n="settings.language"></label>
+            <select id="language-select" class="input"></select>
+        </div>
+
+        <button id="btn-settings-done" type="button" class="btn btn-primary btn-wide" data-i18n="common.done"></button>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
     <script src="request.js"></script>
     <script src="main.js"></script>
 </body>
