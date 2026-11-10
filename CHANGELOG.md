@@ -16,6 +16,7 @@
 - 修复下载期间保存的设置（如关闭自动更新）在下载结束后被改回去。
 - 修复 `target.txt` 自动刷新删除手写的系统应用（如 `com.google.android.gms!`）、带标记的行和无法识别的行。现在只移除不带标记且已从设备卸载的应用。
 - 修复 `target-watch` 收到 TERM 或 INT 后不退出且删掉 pid 文件，下次启动会多出一个 watcher。现在立即退出。
+- README 多语种：新增简体中文、繁体中文、日语和俄语译文，顶部可切换语言；CI 运行 `tools/check_readme.py` 检查译文结构，`README.md` 改动后提示哪些译文需要更新，翻译方法见 `docs/TRANSLATING.md`。
 
 ## v6.0.37 — 2026-11-07
 

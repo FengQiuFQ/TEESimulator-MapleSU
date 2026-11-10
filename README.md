@@ -12,6 +12,8 @@ No Zygisk · No LSPosed · No dependency on any other module · KernelSU / Magis
 [![Arch](https://img.shields.io/badge/Arch-arm64--v8-555?style=flat-square)](docs/INSTALL.md)
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
 
+**English** · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md) · [日本語](README.ja.md) · [Русский](README.ru.md)
+
 [Install](docs/INSTALL.md) · [Build](docs/BUILD.md) · [Configuration](docs/CONFIG.md) · [Architecture](docs/ARCHITECTURE.md) · [FAQ](docs/FAQ.md)
 
 </div>
@@ -109,7 +111,8 @@ Three design decisions matter more than the rest:
 | Certificate chain | off by default; when enabled, Soter blobs carry the keybox chain |
 | Keybox auto-update | on by default, atomic replace, a failed attempt never overwrites the live file and is retried after five minutes; a keybox you placed yourself is only replaced by **Update now**, which backs it up first |
 | System spoofing | bootloader state and security patch date |
-| WebUI | version, SOTER, certificates, keybox, spoofing, scope |
+| Compatibility check | runs at install and prints to the install log without ever blocking it; other modules are judged by what they actually change, not by name |
+| WebUI | version, compatibility check, SOTER, certificates, keybox, spoofing, scope; four maple-leaf seasonal themes (spring, summer, autumn, winter), each in light and dark; Chinese and English text from a translation catalog |
 | Observability | `ksu_status` records each boot step |
 
 ---
@@ -183,7 +186,7 @@ su -c 'cat /data/adb/tricky_store/soter_route'
 | `soter_route=socket` | Soter uses the AMS-independent channel |
 | `conflict=<id>` | another TEE module was detected and this one stepped aside |
 
-Regression notes for public detector checks are in [docs/FAQ.md](docs/FAQ.md#detector-checks).
+Regression notes for public detector checks are in [docs/FAQ.md](docs/FAQ.md#检测项).
 
 ---
 
@@ -207,7 +210,7 @@ See [docs/BUILD.md](docs/BUILD.md).
 |---|---|
 | `dex/` | smali patch tree and Java sources (`mpl/*`): transaction handling and certificate generation |
 | `native/` | `libTEESimulator.so`: binder hooks and the Soter socket channel |
-| `module/` | `service.sh`, `core/webui.sh`, `core/compat.sh`, `webroot/`, `sepolicy.rule` |
+| `module/` | `hide_bootloader.sh`, `core/webui.sh`, `core/compat.sh`, `webroot/`, `sepolicy.rule` |
 | `tools/` | packaging, verification and diagnostic scripts |
 | `docs/` | installation, build, configuration, architecture, FAQ |
 | `scripts/` | build entry point |
@@ -223,6 +226,7 @@ See [docs/BUILD.md](docs/BUILD.md).
 | [CONFIG](docs/CONFIG.md) | every configuration field |
 | [ARCHITECTURE](docs/ARCHITECTURE.md) | interception paths, socket protocol, certificate generation |
 | [FAQ](docs/FAQ.md) | troubleshooting and detector notes |
+| [TRANSLATING](docs/TRANSLATING.md) | translating the WebUI and this README |
 
 ---
 

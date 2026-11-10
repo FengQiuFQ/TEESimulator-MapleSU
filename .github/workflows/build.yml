@@ -60,6 +60,9 @@ jobs:
       - name: WebUI backend tests
         run: bash tools/test_webui_backend.sh
 
+      - name: README translations
+        run: python3 tools/check_readme.py
+
   package:
     name: Package module
     needs: validate
