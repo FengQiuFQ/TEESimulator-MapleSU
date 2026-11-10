@@ -627,7 +627,6 @@ function renderKbu() {
     const chip = $("kbu-chip");
     const controls = [$("toggle-kbu"), $("kbu-source"), $("kbu-custom-url"), $("kbu-interval"), $("btn-kbu-save"), $("btn-kbu-now")];
     const ksu = Backend.isKsu();
-    $("kbu-interval").min = ksu ? "1" : "0";
     $("kbu-hint").textContent = t(ksu ? "kbu.hintKsu" : "kbu.hintUltra");
     if (s.status !== "ready") {
         controls.forEach((control) => { control.disabled = true; });
@@ -635,7 +634,7 @@ function renderKbu() {
         else setChip(chip, null, "");
         $("kbu-sub").textContent = s.status === "error" ? DASH : t("common.loading");
         ["kbu-last", "kbu-result", "kbu-next", "kbu-url"].forEach((id) => setText($(id), ""));
-        $("kbu-zero-warn").hidden = true;
+        $("kbu-kept").hidden = true;
         $("kbu-custom-row").hidden = true;
         problemBar(card, [s], () => { loadKbu().then(renderStatus); });
         return;
@@ -652,14 +651,23 @@ function renderKbu() {
     if (!enabled) $("kbu-sub").textContent = t("kbu.subOff");
     else if (interval > 0) $("kbu-sub").textContent = t("kbu.subHours", { count: interval, source: sourceName });
     else $("kbu-sub").textContent = t("kbu.subBoot", { source: sourceName });
-    $("kbu-zero-warn").hidden = !(ksu && enabled && interval === 0);
+    const kept = enabled && data.autoState === "kept";
+    $("kbu-kept").hidden = !kept;
     $("kbu-custom-row").hidden = $("kbu-source").value !== "custom";
     setText($("kbu-last"), data.lastCheckEpoch ? TEEI18N.date(data.lastCheckEpoch) : t("kbu.never"));
     setText($("kbu-result"), kbuResultText(data.lastResult));
     $("kbu-result").classList.toggle("text-err", String(data.lastResult || "").indexOf("fail:") === 0);
-    setText($("kbu-next"), !enabled ? "" : (interval > 0 && data.nextEpoch ? TEEI18N.date(data.nextEpoch) : t("kbu.nextBoot")));
+    setText($("kbu-next"), !enabled ? "" : kbuNextText(data, interval, kept));
     setText($("kbu-url"), data.effectiveUrl);
     PanelBar.show(card, null);
+}
+
+/* With interval 0 webui.sh still gives a time while a run is pending, such as a retry
+   after a failure. What the Ultra backend sends there is not known, so it says next boot. */
+function kbuNextText(data, interval, kept) {
+    if (kept) return t("kbu.nextKept");
+    if (data.nextEpoch && (interval > 0 || Backend.isKsu())) return TEEI18N.date(data.nextEpoch);
+    return t("kbu.nextBoot");
 }
 
 function kbuDraft() {
@@ -671,13 +679,9 @@ function kbuDraft() {
     };
 }
 
-/* webui.sh treats an interval of 0 as "due on every tick" and downloads again every 30 s
-   instead of once per boot, so 0 is only offered on the backend where it means boot. */
 function kbuPayloadProblem(payload) {
-    const ksu = Backend.isKsu();
-    const min = ksu ? 1 : 0;
-    if (!Number.isInteger(payload.intervalHours) || payload.intervalHours < min || payload.intervalHours > 8760) {
-        return t(ksu ? "kbu.badIntervalKsu" : "kbu.badIntervalUltra");
+    if (!Number.isInteger(payload.intervalHours) || payload.intervalHours < 0 || payload.intervalHours > 8760) {
+        return t("kbu.badInterval");
     }
     if (payload.source === "custom" && !/^https?:\/\/.+/i.test(payload.customUrl)) return t("kbu.badUrl");
     return "";
@@ -755,7 +759,9 @@ async function onKbuNow() {
         }
         if (result.ok) {
             await Promise.all([loadKeyboxes(), loadVersionInfo()]);
-            showToast(t("kbu.updatedToast"));
+            /* Shown longer, because the path is worth reading. */
+            if (result.backup) showToast(t("kbu.updatedBackupToast", { path: result.backup }), true);
+            else showToast(t("kbu.updatedToast"));
         } else {
             showToast(t("kbu.updateFailed", { reason: tokenText(result.reason) || result.reason || t("err.unknown") }), true);
         }

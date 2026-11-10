@@ -107,7 +107,7 @@ Three design decisions matter more than the rest:
 | Soter | 13 transactions, registry, sessions, error codes, PSS signatures |
 | Soter scope | per-app allowlist, editable in the WebUI |
 | Certificate chain | off by default; when enabled, Soter blobs carry the keybox chain |
-| Keybox auto-update | on by default, atomic replace, a failed attempt never overwrites the live file and is retried after five minutes |
+| Keybox auto-update | on by default, atomic replace, a failed attempt never overwrites the live file and is retried after five minutes; a keybox you placed yourself is only replaced by **Update now**, which backs it up first |
 | System spoofing | bootloader state and security patch date |
 | WebUI | version, SOTER, certificates, keybox, spoofing, scope |
 | Observability | `ksu_status` records each boot step |

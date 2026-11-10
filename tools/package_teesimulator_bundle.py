@@ -1043,24 +1043,17 @@ fi
         set_status boot_apply absent
     fi
 
-    # 3e. keybox auto-update (KSU has no kernel module to schedule it)
+    # 3e. keybox auto-update (KSU has no kernel module to schedule it). webui.sh decides:
+    # disabled, kept (the user placed keybox.xml), not_due or due. It must be kbu-tick here,
+    # because kbu_now is "Update now" and replaces a keybox the user placed.
     _KBU=unavailable
     if [ -f "$MODDIR/core/webui.sh" ]; then
         _kbu_json=$(sh "$MODDIR/core/webui.sh" kbu_status 2>/dev/null)
-        _kbu_enabled=$(printf '%s' "$_kbu_json" | sed -n 's/.*"enabled":\(true\).*/\1/p')
-        _kbu_next=$(printf '%s' "$_kbu_json" | sed -n 's/.*"nextEpoch":\([0-9][0-9]*\).*/\1/p')
-        _kbu_now=$(printf '%s' "$_kbu_json" | sed -n 's/.*"now":\([0-9][0-9]*\).*/\1/p')
-        if [ "$_kbu_enabled" = true ]; then
-            _KBU=not_due
-            if [ -n "$_kbu_next" ] && [ -n "$_kbu_now" ] && [ "$_kbu_next" -le "$_kbu_now" ] 2>/dev/null; then
-                _KBU=due
-            fi
-        else
-            _KBU=disabled
-        fi
+        _kbu_state=$(printf '%s' "$_kbu_json" | sed -n 's/.*"autoState":"\([a-z_]*\)".*/\1/p')
+        [ -n "$_kbu_state" ] && _KBU=$_kbu_state
         if [ "$_KBU" = due ]; then
             rm -f "$CONFIG_DIR/kbu_boot.rc" "$CONFIG_DIR/kbu_boot.out" 2>/dev/null
-            ( sh "$MODDIR/core/webui.sh" kbu_now > "$CONFIG_DIR/kbu_boot.out" 2>> "$BOOT_LOG"; echo $? > "$CONFIG_DIR/kbu_boot.rc" ) &
+            ( sh "$MODDIR/core/webui.sh" kbu-tick > "$CONFIG_DIR/kbu_boot.out" 2>> "$BOOT_LOG"; echo $? > "$CONFIG_DIR/kbu_boot.rc" ) &
             _n=0
             while [ "$_n" -lt 25 ]; do
                 [ -f "$CONFIG_DIR/kbu_boot.rc" ] && break
@@ -1069,7 +1062,7 @@ fi
             done
             if [ -f "$CONFIG_DIR/kbu_boot.rc" ]; then
                 _rc=$(cat "$CONFIG_DIR/kbu_boot.rc" 2>/dev/null)
-                if [ "$_rc" = 0 ] && grep -q '"ok":true' "$CONFIG_DIR/kbu_boot.out" 2>/dev/null; then
+                if [ "$_rc" = 0 ] && grep -q '^OK$' "$CONFIG_DIR/kbu_boot.out" 2>/dev/null; then
                     _KBU=ok
                     log_msg "keybox auto-update applied"
                 else

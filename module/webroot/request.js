@@ -800,6 +800,8 @@ function normalizeKeyboxUpdate(raw) {
     const source = String(pickField(data, ["source", "current_source"], ""));
     return {
         enabled: enabled,
+        /* Only webui.sh reports this: disabled, kept, not_due or due. */
+        autoState: String(pickField(data, ["autoState"], "")),
         source: source,
         sourceName: String(pickField(data, ["sourceName", "source_name"], source)),
         customUrl: String(pickField(data, ["customUrl", "custom_url"], "")),
@@ -820,6 +822,7 @@ function normalizeKeyboxUpdateNow(raw) {
     return {
         ok: hasOk ? asBool(data.ok, false) : !reason,
         reason: reason,
+        backup: String(pickField(data, ["backup"], "")),
         status: statusRaw && typeof statusRaw === "object" ? normalizeKeyboxUpdate(statusRaw) : null,
     };
 }

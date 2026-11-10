@@ -57,6 +57,9 @@ jobs:
       - name: Compatibility check tests
         run: bash tools/test_compat.sh
 
+      - name: WebUI backend tests
+        run: bash tools/test_webui_backend.sh
+
   package:
     name: Package module
     needs: validate
