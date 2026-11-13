@@ -48,6 +48,7 @@ arm64-v8a、Android 10+、KernelSU / Magisk / APatch。
 ## 更新会覆盖我的配置吗
 
 不会。keybox、`target.txt`、`security_patch.txt` 只在缺失时创建，升级不覆盖。
+证书自动更新也不会替换你自己放的 keybox，见 [配置说明](CONFIG.md#keyboxxml)。
 
 ## 如何彻底回滚
 

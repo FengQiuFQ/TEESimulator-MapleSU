@@ -85,6 +85,7 @@ AUTO_THIRD_FLAG=$CONFIG_DIR/auto_third_app_toggle
 KEY_TAKEOVER_FLAG=$CONFIG_DIR/key_takeover
 KBU_CONF=$CONFIG_DIR/keybox_update.conf
 KBU_TMP=$CONFIG_DIR/keybox.xml.download.tmp
+KBU_UPTIME_FILE=${WEBUI_KSU_UPTIME_FILE:-/proc/uptime}
 KSU_STATUS=$CONFIG_DIR/ksu_status
 
 KEYBOX_XML_SRC=$CORE/keybox.xml
@@ -389,10 +390,41 @@ get_auto_third_app() {
     read_flag "$AUTO_THIRD_FLAG" 1
 }
 
+# pm_package_names <output file> <pm list flag>: sorted names, an empty file when pm fails.
+pm_package_names() {
+    _pn_out=$1
+    _pn_raw=$_pn_out.raw
+    : > "$_pn_out" 2>/dev/null
+    command -v pm >/dev/null 2>&1 || return 0
+    # `pm` talks to system_server; never let a slow boot block service.sh.
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 10 pm list packages "$2" > "$_pn_raw" 2>/dev/null
+    else
+        pm list packages "$2" > "$_pn_raw" 2>/dev/null
+    fi
+    _rc=$?
+    if [ "$_rc" -eq 0 ] && [ -s "$_pn_raw" ]; then
+        tr -d "\r" < "$_pn_raw" | sed -n "s/^[[:space:]]*package://p" \
+            | tr -d " " | sort -u > "$_pn_out" 2>/dev/null
+    fi
+    rm -f "$_pn_raw" 2>/dev/null
+}
+
+# Whether a package from target.txt is still on the device. The third-party list alone
+# cannot say: it leaves out system apps such as com.google.android.gms and apps that only
+# another user has. "-u" covers both. It is asked only when needed, because pm is slow,
+# and a failed query answers yes so that it never shrinks the list.
+target_pkg_on_device() {
+    grep -q -x -F -e "$1" "$_inst" 2>/dev/null && return 0
+    [ -f "$_known" ] || pm_package_names "$_known" -u
+    [ -s "$_known" ] || return 0
+    grep -q -x -F -e "$1" "$_known" 2>/dev/null
+}
+
 # C++ write_target_txt_applist(): third-party package names, one per line.
 # The dex accepts the prefix marker forms !pkg / ?pkg and upstream accepts the
-# suffix forms pkg! / pkg?; a refresh keeps every existing marked line whose
-# package is still installed and only appends plain names for the rest.
+# suffix forms pkg! / pkg?. A refresh only ever adds plain names, so it only removes a
+# plain name whose app has left the device; every other line came from the user and stays.
 refresh_target_txt() {
     ensure_config_dir || return 1
     # Work outside the watched config directory so a refresh does not look like a
@@ -404,25 +436,13 @@ refresh_target_txt() {
         rm -f "$_base.probe" 2>/dev/null
     fi
     _tmp="$_base.tmp"
-    _raw="$_base.raw"
     _inst="$_base.inst"
+    _known="$_base.known"
     _kept="$_base.kept"
     _names="$_base.names"
-    : > "$_inst" 2>/dev/null
-    if command -v pm >/dev/null 2>&1; then
-        # `pm` talks to system_server; never let a slow boot block service.sh.
-        if command -v timeout >/dev/null 2>&1; then
-            timeout 10 pm list packages -3 > "$_raw" 2>/dev/null
-        else
-            pm list packages -3 > "$_raw" 2>/dev/null
-        fi
-        _rc=$?
-        if [ "$_rc" -eq 0 ] && [ -s "$_raw" ]; then
-            tr -d "\r" < "$_raw" | sed -n "s/^[[:space:]]*package://p" \
-                | tr -d " " | sort -u > "$_inst" 2>/dev/null
-        fi
-    fi
-    rm -f "$_raw" 2>/dev/null
+    # The watcher reuses its pid for every refresh, so a list left by an interrupted one goes.
+    rm -f "$_known" 2>/dev/null
+    pm_package_names "$_inst" -3
     if [ ! -s "$_inst" ]; then
         printf 'fail:pm_empty\n' > "$CONFIG_DIR/target_refresh" 2>/dev/null
         rm -f "$_inst" "$_kept" "$_names" "$_tmp" 2>/dev/null
@@ -447,9 +467,12 @@ refresh_target_txt() {
                 *'!'|*'?') _pkg=${_line%?} ;;
             esac
             case $_pkg in
-                ''|*[!A-Za-z0-9._]*) continue ;;
+                ''|*[!A-Za-z0-9._]*)
+                    printf '%s\n' "$_line" >> "$_kept" 2>/dev/null
+                    continue
+                    ;;
             esac
-            if grep -q -x -F -e "$_pkg" "$_inst" 2>/dev/null; then
+            if [ "$_pkg" != "$_line" ] || target_pkg_on_device "$_pkg"; then
                 printf '%s\n' "$_line" >> "$_kept" 2>/dev/null
                 printf '%s\n' "$_pkg" >> "$_names" 2>/dev/null
             fi
@@ -462,7 +485,7 @@ refresh_target_txt() {
     done < "$_inst"
     _out="$_base.merge"
     cat "$_kept" "$_tmp" > "$_out" 2>/dev/null
-    rm -f "$_inst" "$_kept" "$_names" "$_tmp" 2>/dev/null
+    rm -f "$_inst" "$_known" "$_kept" "$_names" "$_tmp" 2>/dev/null
     if [ -s "$_out" ]; then
         # Only replace the file when the content actually changed: an unconditional
         # rewrite wakes the daemon's watcher every cycle.
@@ -791,7 +814,8 @@ norm_uint() {
 load_kbu_conf() {
     # 6.0.14: auto-update is enabled by default on the Yurikey channel. A failed
     # download keeps the current keybox (see kbu_perform_update: tmp + validate +
-    # atomic rename, never a direct overwrite).
+    # atomic rename, never a direct overwrite), and a keybox the user placed is never
+    # replaced automatically (see kbu_keybox_origin).
     KBU_ENABLED=1
     KBU_SOURCE=yurikey
     KBU_CUSTOM_URL=
@@ -799,6 +823,7 @@ load_kbu_conf() {
     KBU_LAST_EPOCH=0
     KBU_RETRY_AFTER=0
     KBU_LAST_RESULT=
+    KBU_INSTALLED_SHA=
     [ -f "$KBU_CONF" ] || return 0
     while IFS= read -r _line || [ -n "$_line" ]; do
         _line=$(trim "$_line")
@@ -835,6 +860,7 @@ load_kbu_conf() {
                 esac
                 ;;
             last_result)  KBU_LAST_RESULT=$_v ;;
+            installed_sha256) KBU_INSTALLED_SHA=$_v ;;
         esac
     done < "$KBU_CONF"
     case $KBU_SOURCE in
@@ -860,6 +886,7 @@ interval_hours=$KBU_INTERVAL
 last_check_epoch=$KBU_LAST_EPOCH
 retry_after_epoch=$KBU_RETRY_AFTER
 last_result=$KBU_LAST_RESULT
+installed_sha256=$KBU_INSTALLED_SHA
 "
     atomic_write "$KBU_CONF" 0600 "$_body"
 }
@@ -891,16 +918,97 @@ kbu_effective_url() {
     esac
 }
 
+# Where the current keybox.xml came from: none, update (installed by an earlier update),
+# builtin (the copy packaged with the module) or manual. Only manual is protected from
+# automatic updates, and anything that cannot be identified counts as manual.
+kbu_keybox_origin() {
+    keybox_installed || { printf 'none'; return 0; }
+    _ko_sha=$(sha256_file "$KEYBOX_XML_DST" 2>/dev/null) || _ko_sha=
+    if [ -n "$_ko_sha" ]; then
+        if [ "$_ko_sha" = "$KBU_INSTALLED_SHA" ]; then printf 'update'; return 0; fi
+        _ko_src=$(sha256_file "$KEYBOX_XML_SRC" 2>/dev/null) || _ko_src=
+        if [ "$_ko_sha" = "$_ko_src" ]; then printf 'builtin'; return 0; fi
+    fi
+    # Versions without the hash record: an update wrote the file within moments of its
+    # last_check_epoch. Without this, upgrading would stop updates for everyone using them.
+    if [ -z "$KBU_INSTALLED_SHA" ] && [ "$KBU_LAST_EPOCH" -gt 0 ] 2>/dev/null; then
+        _ko_mtime=$(stat -c %Y "$KEYBOX_XML_DST" 2>/dev/null)
+        case $_ko_mtime in
+            ''|*[!0-9]*) ;;
+            *)
+                if [ "$_ko_mtime" -ge "$KBU_LAST_EPOCH" ] 2>/dev/null \
+                    && [ $((_ko_mtime - KBU_LAST_EPOCH)) -le 120 ] 2>/dev/null; then
+                    printf 'update'
+                    return 0
+                fi
+                ;;
+        esac
+    fi
+    printf 'manual'
+}
+
+# Whether the schedule calls for an automatic update now. The backoff is checked first: it
+# has to hold whatever the rest says, or a device that cannot reach the source downloads
+# again at every check.
+kbu_is_due() {
+    _kd_now=$(now_epoch)
+    [ "$_kd_now" -gt 0 ] 2>/dev/null || return 1
+    if [ "$KBU_RETRY_AFTER" -gt 0 ] 2>/dev/null; then
+        # A retry time further away than the backoff itself means the clock has moved.
+        if [ "$_kd_now" -lt "$KBU_RETRY_AFTER" ] 2>/dev/null \
+            && [ $((KBU_RETRY_AFTER - _kd_now)) -le 300 ] 2>/dev/null; then
+            return 1
+        fi
+        return 0
+    fi
+    [ "$KBU_LAST_EPOCH" -gt 0 ] 2>/dev/null || return 0
+    if [ "$KBU_INTERVAL" -le 0 ] 2>/dev/null; then
+        # Interval 0 means once per boot: due when the last success predates this boot.
+        _kd_up=$(cut -d. -f1 "$KBU_UPTIME_FILE" 2>/dev/null)
+        case $_kd_up in ''|*[!0-9]*) return 1 ;; esac
+        [ "$KBU_LAST_EPOCH" -lt $((_kd_now - _kd_up)) ] 2>/dev/null
+        return
+    fi
+    [ "$_kd_now" -lt "$KBU_LAST_EPOCH" ] 2>/dev/null && return 0
+    [ $((_kd_now - KBU_LAST_EPOCH)) -ge $((KBU_INTERVAL * 3600)) ] 2>/dev/null
+}
+
+# What an automatic update would do right now: disabled, kept, not_due or due.
+kbu_auto_state() {
+    if [ "$KBU_ENABLED" != 1 ]; then
+        printf 'disabled'
+    elif [ "$(kbu_keybox_origin)" = manual ]; then
+        printf 'kept'
+    elif kbu_is_due; then
+        printf 'due'
+    else
+        printf 'not_due'
+    fi
+}
+
+# Copies the current keybox.xml next to it, readable by root only. Sets KBU_BACKUP_PATH.
+kbu_backup_keybox() {
+    _kb_path="$KEYBOX_XML_DST.bak.$(date +%Y%m%d-%H%M%S 2>/dev/null)"
+    ( umask 077; cp -f "$KEYBOX_XML_DST" "$_kb_path" ) 2>/dev/null
+    chmod 0600 "$_kb_path" 2>/dev/null
+    if ! cmp -s "$KEYBOX_XML_DST" "$_kb_path"; then
+        rm -f "$_kb_path" 2>/dev/null
+        return 1
+    fi
+    KBU_BACKUP_PATH=$_kb_path
+}
+
 kbu_status_json() {
     _now=$(now_epoch)
     _url=$(kbu_effective_url)
+    # 0 with interval 0 means the next boot, which has no epoch.
     _next=0
     if [ "$KBU_ENABLED" = 1 ]; then
-        if [ "$KBU_RETRY_AFTER" -gt 0 ] 2>/dev/null && [ "$_now" -lt "$KBU_RETRY_AFTER" ] 2>/dev/null; then
-            _next=$KBU_RETRY_AFTER
-        elif [ "$KBU_INTERVAL" -le 0 ] 2>/dev/null || [ "$KBU_LAST_EPOCH" -le 0 ] 2>/dev/null; then
+        if kbu_is_due; then
             _next=$_now
-        else
+        elif [ "$KBU_RETRY_AFTER" -gt 0 ] 2>/dev/null; then
+            _next=$KBU_RETRY_AFTER
+        elif [ "$KBU_INTERVAL" -gt 0 ] 2>/dev/null; then
             _next=$((KBU_LAST_EPOCH + KBU_INTERVAL * 3600))
         fi
     fi
@@ -912,8 +1020,8 @@ kbu_status_json() {
         yurikey) _sname='Yurikey' ;;
         *)       _sname='自定义' ;;
     esac
-    printf '{"enabled":%s,"source":"%s","sourceName":"%s","customUrl":"%s","effectiveUrl":"%s","intervalHours":%s,"lastCheckEpoch":%s,"lastCheckText":"%s","lastResult":"%s","nextEpoch":%s,"nextText":"%s","now":%s,"confPath":"%s","keyboxPath":"%s","sources":[{"id":"yurikey","name":"Yurikey","url":"%s","builtin":true},{"id":"custom","name":"自定义 URL","url":"","builtin":false}]}\n' \
-        "$(json_bool "$KBU_ENABLED")" "$(json_escape "$KBU_SOURCE")" \
+    printf '{"enabled":%s,"autoState":"%s","source":"%s","sourceName":"%s","customUrl":"%s","effectiveUrl":"%s","intervalHours":%s,"lastCheckEpoch":%s,"lastCheckText":"%s","lastResult":"%s","nextEpoch":%s,"nextText":"%s","now":%s,"confPath":"%s","keyboxPath":"%s","sources":[{"id":"yurikey","name":"Yurikey","url":"%s","builtin":true},{"id":"custom","name":"自定义 URL","url":"","builtin":false}]}\n' \
+        "$(json_bool "$KBU_ENABLED")" "$(kbu_auto_state)" "$(json_escape "$KBU_SOURCE")" \
         "$(json_escape "$_sname")" "$(json_escape "$KBU_CUSTOM_URL")" \
         "$(json_escape "$_url")" "$KBU_INTERVAL" "$KBU_LAST_EPOCH" \
         "$(json_escape "$_lct")" "$(json_escape "$_lr")" "$_next" "$(json_escape "$_nxt")" \
@@ -1127,10 +1235,15 @@ download_to() {
 # perform_keybox_update(): download -> unwrap -> validate -> atomic replace.
 # Sets KBU_RUN_RESULT to "ok" or the failure token; never prints, so both the
 # WebUI command and the boot hook can share it.
+# kbu_perform_update auto: boot and watcher runs, which leave a keybox the user placed alone.
+# kbu_perform_update manual: "Update now", which replaces it and sets KBU_BACKUP_PATH.
 kbu_perform_update() {
+    _kbu_mode=$1
     _now=$(now_epoch)
     _url=$(kbu_effective_url)
     _reason=
+    _new_sha=
+    KBU_BACKUP_PATH=
     if [ -z "$_url" ]; then
         _reason=bad_url
     else
@@ -1139,7 +1252,10 @@ kbu_perform_update() {
             return 1
         fi
         _trail=$(download_to "$_url" "$KBU_TMP")
-        if [ $? -ne 0 ]; then
+        _kbu_rc=$?
+        # A download can take a minute. Settings saved meanwhile must survive the save below.
+        load_kbu_conf
+        if [ "$_kbu_rc" -ne 0 ]; then
             _reason="download_failed($_trail)"
         else
             _xml="$KBU_TMP.xml"
@@ -1148,8 +1264,18 @@ kbu_perform_update() {
             else
                 validate_keybox_file "$_xml" || _reason="invalid_keybox:$V_ERR"
             fi
+            # An automatic run must not act on what it decided before the download either.
+            if [ -z "$_reason" ] && [ "$_kbu_mode" = auto ] && [ "$(kbu_auto_state)" != due ]; then
+                rm -f "$KBU_TMP" "$_xml" 2>/dev/null
+                KBU_RUN_RESULT=ok
+                return 0
+            fi
+            if [ -z "$_reason" ] && [ "$(kbu_keybox_origin)" = manual ]; then
+                kbu_backup_keybox || _reason=backup_failed
+            fi
             if [ -z "$_reason" ]; then
                 chmod 0644 "$_xml" 2>/dev/null
+                _new_sha=$(sha256_file "$_xml" 2>/dev/null) || _new_sha=
                 if mv -f "$_xml" "$KEYBOX_XML_DST" 2>/dev/null; then
                     chmod 0644 "$KEYBOX_XML_DST" 2>/dev/null
                 else
@@ -1163,6 +1289,7 @@ kbu_perform_update() {
         KBU_LAST_EPOCH=$_now
         KBU_RETRY_AFTER=0
         KBU_LAST_RESULT=ok
+        KBU_INSTALLED_SHA=$_new_sha
         KBU_RUN_RESULT=ok
         save_kbu_conf || log_line 'kbu: save conf failed'
         return 0
@@ -1179,8 +1306,9 @@ kbu_perform_update() {
 
 kbu_now_json() {
     load_kbu_conf
-    if kbu_perform_update; then
-        printf '{"ok":true,"reason":"ok","status":%s}\n' "$(kbu_status_json)"
+    if kbu_perform_update manual; then
+        printf '{"ok":true,"reason":"ok","backup":"%s","status":%s}\n' \
+            "$(json_escape "$KBU_BACKUP_PATH")" "$(kbu_status_json)"
     else
         printf '{"ok":false,"reason":"%s","status":%s}\n' \
             "$(json_escape "$KBU_RUN_RESULT")" "$(kbu_status_json)"
@@ -1371,26 +1499,18 @@ cmd_boot_apply() {
     _kbu_state=skipped
     if [ "$_do_kbu" = 1 ]; then
         load_kbu_conf
-        _now=$(now_epoch)
-        _due=0
-        if [ "$KBU_ENABLED" = 1 ]; then
-            if [ "$KBU_RETRY_AFTER" -gt 0 ] 2>/dev/null && [ "$_now" -ge "$KBU_RETRY_AFTER" ] 2>/dev/null; then
-                _due=1
-            elif [ "$KBU_INTERVAL" -le 0 ] 2>/dev/null || [ "$KBU_LAST_EPOCH" -le 0 ] 2>/dev/null; then
-                _due=1
-            elif [ "$_now" -lt "$KBU_LAST_EPOCH" ] 2>/dev/null; then
-                _due=1
-            elif [ $((_now - KBU_LAST_EPOCH)) -ge $((KBU_INTERVAL * 3600)) ] 2>/dev/null; then
-                _due=1
-            fi
-        fi
-        if [ "$_due" = 1 ]; then
-            if kbu_perform_update; then
-                _kbu_state=ran
-            else
-                _kbu_state="fail:$KBU_RUN_RESULT"
-            fi
-        fi
+        case $(kbu_auto_state) in
+            due)
+                if kbu_perform_update auto; then
+                    _kbu_state=ran
+                else
+                    _kbu_state="fail:$KBU_RUN_RESULT"
+                fi
+                ;;
+            kept)
+                _kbu_state=kept
+                ;;
+        esac
     fi
 
     # 5) machine-readable boot record; merge, never truncate the other keys.
@@ -1458,6 +1578,7 @@ cmd_logs() {
         getprop ro.product.model; getprop ro.build.version.release
         getprop ro.build.version.sdk; getprop ro.product.cpu.abi
         printf '\n[ksu_status]\n'; cat "$CONFIG_DIR/ksu_status" 2>/dev/null
+        printf '\n[compat]\n'; sh "$SCRIPT_DIR/compat.sh" --json 2>/dev/null
         printf '\n[soter_route]\n'; cat "$CONFIG_DIR/soter_route" 2>/dev/null
         printf '\n[key_takeover]\n'; get_key_takeover
         printf '\n[keybox live]\n'
@@ -1507,6 +1628,12 @@ cmd_logs() {
 }
 
 
+target_watch_stop() {
+    [ -n "$_sleep_pid" ] && kill "$_sleep_pid" 2>/dev/null
+    rm -f "$_pidfile" 2>/dev/null
+    exit "$1"
+}
+
 # Continuous target refresh: every 30 seconds, from boot onwards, hot-reload safe.
 # Single instance guarded by a pid file (a second service.sh run must not double it).
 cmd_target_watch() {
@@ -1526,7 +1653,12 @@ cmd_target_watch() {
     ensure_config_dir || { err_json 'config_dir_unavailable'; return; }
     printf '%s\n' "$$" > "$_pidfile" 2>/dev/null
     chmod 0644 "$_pidfile" 2>/dev/null
-    trap 'rm -f "$_pidfile" 2>/dev/null' EXIT INT TERM
+    _sleep_pid=
+    # A trap replaces the default action, so it has to end the shell itself. Otherwise the
+    # loop runs on with its pid file gone and the next start adds a second watcher.
+    trap 'rm -f "$_pidfile" 2>/dev/null' EXIT
+    trap 'target_watch_stop 143' TERM
+    trap 'target_watch_stop 130' INT
     printf '{"ok":true,"running":true,"pid":%s,"interval":%s}\n' "$$" "$_interval"
     _ticks=0
     _last_sig=
@@ -1546,29 +1678,21 @@ cmd_target_watch() {
         # KeyBox: only talks to the network when an update is actually due.
         kbu_tick >/dev/null 2>&1 || log_line 'target-watch: kbu tick failed'
         _ticks=$((_ticks + 1))
-        sleep "$_interval"
+        # In the background so that a signal is handled now, not after the sleep.
+        sleep "$_interval" &
+        _sleep_pid=$!
+        wait "$_sleep_pid"
     done
 }
 
 
-# Cheap due check for the keybox auto-update; the heavy path only runs when due.
+# Cheap due check for the keybox auto-update; the heavy path only runs when due. The
+# schedule comes first because it needs no file hash, and this runs every 30 seconds.
 kbu_tick() {
     load_kbu_conf
-    [ "$KBU_ENABLED" = 1 ] || return 0
-    _now=$(date +%s 2>/dev/null) || return 0
-    case $_now in ''|*[!0-9]*) return 0 ;; esac
-    _due=0
-    if [ "$KBU_RETRY_AFTER" -gt 0 ] 2>/dev/null && [ "$_now" -ge "$KBU_RETRY_AFTER" ] 2>/dev/null; then
-        _due=1
-    elif [ "$KBU_INTERVAL" -le 0 ] 2>/dev/null || [ "$KBU_LAST_EPOCH" -le 0 ] 2>/dev/null; then
-        _due=1
-    elif [ "$_now" -lt "$KBU_LAST_EPOCH" ] 2>/dev/null; then
-        _due=1
-    elif [ $((_now - KBU_LAST_EPOCH)) -ge $((KBU_INTERVAL * 3600)) ] 2>/dev/null; then
-        _due=1
-    fi
-    [ "$_due" = 1 ] || return 0
-    kbu_perform_update
+    kbu_is_due || return 0
+    [ "$(kbu_auto_state)" = due ] || return 0
+    kbu_perform_update auto
 }
 
 
@@ -1631,6 +1755,16 @@ set_key_takeover() {
     printf 'OK\n'
 }
 
+# Compatibility report as one JSON line; the same script runs during install.
+cmd_compat() {
+    _s=$SCRIPT_DIR/compat.sh
+    if [ ! -f "$_s" ]; then
+        err_json 'unsupported:compat'
+        return
+    fi
+    sh "$_s" --json 2>/dev/null || err_json 'compat_failed'
+}
+
 cmd_info() {
     _ver=$(module_version)
     _vcode=$(module_version_code)
@@ -1645,7 +1779,7 @@ cmd_info() {
         _kb_short=unknown
     fi
     _soter=$(get_soter)
-    printf '{"module":"TEESimulator-RS","version":"%s","author":"%s","dex_sha256":"%s","dex_short":"%s","keybox_short":"%s","keybox_current":"%s","keybox_active":"%s","soter_forge":%s,"build":"%s","mode":"ksu","backend":"ksu","features":["info","get soter","set soter","get soter_certs","set soter_certs","get hide_bootloader","set hide_bootloader","get auto_third_app","set auto_third_app","get patch","set patch","keyboxes","keybox_set","keybox_reload","kbu_status","kbu_config","kbu_now","scope list","scope set","scope setall","targets","get debug","set debug","logs","target-watch","kbu-tick","soter-warm","get key_takeover","set key_takeover"],"unsupported":["get fix_tee","set fix_tee"],"features_note":"target.txt accepts both prefix (!pkg/?pkg, dex) and suffix (pkg!/pkg?, upstream) markers"}\n' \
+    printf '{"module":"TEESimulator-RS","version":"%s","author":"%s","dex_sha256":"%s","dex_short":"%s","keybox_short":"%s","keybox_current":"%s","keybox_active":"%s","soter_forge":%s,"build":"%s","mode":"ksu","backend":"ksu","features":["info","get soter","set soter","get soter_certs","set soter_certs","get hide_bootloader","set hide_bootloader","get auto_third_app","set auto_third_app","get patch","set patch","keyboxes","keybox_set","keybox_reload","kbu_status","kbu_config","kbu_now","scope list","scope set","scope setall","targets","get debug","set debug","logs","compat","target-watch","kbu-tick","soter-warm","get key_takeover","set key_takeover"],"unsupported":["get fix_tee","set fix_tee"],"features_note":"target.txt accepts both prefix (!pkg/?pkg, dex) and suffix (pkg!/pkg?, upstream) markers"}\n' \
         "$(json_escape "$_ver")" "$(json_escape "$MOD_AUTHOR")" \
         "$_dex_sha" "$_dex_short" "$_kb_short" \
         "$(json_escape "$_cur")" "$(json_escape "$_act")" \
@@ -1721,13 +1855,20 @@ case $CMD in
         cmd_target_watch "${2:-30}"
         ;;
     kbu-tick)
-        kbu_tick && printf 'OK\n' || err_json 'kbu_tick_failed'
+        if kbu_tick; then
+            printf 'OK\n'
+        else
+            err_json "kbu_tick_failed:${KBU_RUN_RESULT:-unknown}"
+        fi
         ;;
     soter-warm)
         soter_warm
         ;;
     logs)
         cmd_logs
+        ;;
+    compat)
+        cmd_compat
         ;;
     targets)
         cmd_targets
