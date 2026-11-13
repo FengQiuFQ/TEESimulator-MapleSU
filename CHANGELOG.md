@@ -2,7 +2,7 @@
 
 所有显著变更都会记录在这里。版本号与 Release tag 对应（`vX.Y.Z`）。
 
-## Unreleased
+## v6.0.38 — 2026-11-13
 
 - 安装时自动检查一次兼容性，结果打印在安装日志里，只提示，不阻止安装。检查不针对具体模块：按模块实际做的事判断，和设备自带值相同的属性不提示。
 - 新增 `core/compat.sh`（`--text` / `--json`），最近一次结果保存在 `compat_report.json`，WebUI 导出的诊断日志也包含这份结果。
@@ -18,6 +18,7 @@
 - 修复 `target-watch` 收到 TERM 或 INT 后不退出且删掉 pid 文件，下次启动会多出一个 watcher。现在立即退出。
 - README 多语种：新增简体中文、繁体中文、日语和俄语译文，顶部可切换语言；CI 运行 `tools/check_readme.py` 检查译文结构，`README.md` 改动后提示哪些译文需要更新，翻译方法见 `docs/TRANSLATING.md`。
 
+- 发布包改为 **STORED（不压缩）**，规避部分设备 `unzip` 报 `corrupt deflate stream`；公开包仍不含 keybox。
 ## v6.0.37 — 2026-11-07
 
 - 兼容性构建：模块内所有文件改为 **STORED（不压缩）**，规避部分设备 `unzip` 报 `corrupt deflate stream` 的问题；解包后内容与压缩版完全一致。

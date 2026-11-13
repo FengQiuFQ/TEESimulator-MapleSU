@@ -150,8 +150,8 @@ PRO_KEYBOX_SHA256 = "b7629b3d348c7386b397966111c0ef3b3d9fa9eef4e2d715a64fef6740b
 
 MODULE_PROP = """id=tricky_store
 name=TEESimulator-RS_MapleSU
-version=6.0.37_MapleSU
-versionCode=63700
+version=6.0.38_MapleSU
+versionCode=63800
 author=TEESimulator-RS / MapleSU
 description=频道：@MapleAutumn MapleSU_Normal定制版.Hardware-backed key attestation simulator, available for manual installation in MapleSU. By.MapleAutumn Customized Fixed Soter. 解决TEESimulator-RS目前已知所有检测点与Soter.
 updateJson=https://raw.githubusercontent.com/FengQiuFQ/TEESimulator-MapleSU/main/update.json
