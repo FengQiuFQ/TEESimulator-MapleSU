@@ -2,6 +2,10 @@
 
 所有显著变更都会记录在这里。版本号与 Release tag 对应（`vX.Y.Z`）。
 
+## v6.0.40 — 2026-11-14
+
+- 修复 6.0.39 的 dex 校验失败：用量门禁在汇合点把 v1 同时当 String/boolean，且调用点覆盖了仍保存 `this` 的 v0；改为 v1 存 alias、v3 存结果、v8 传参。
+
 ## v6.0.39 — 2026-11-13
 
 - 修复“次数用尽后预开的第二个 operation 仍能签名”：新增持久化用尽账本 `usage_exhausted`，`SoftwareOperation.finish` 对已用尽 alias 抛 `KEY_EXPIRED`；同名重新生成时清除。

@@ -1,6 +1,6 @@
 {
-  "version": "6.0.39_MapleSU",
-  "versionCode": 63900,
-  "zipUrl": "https://github.com/FengQiuFQ/TEESimulator-MapleSU/releases/download/v6.0.39/TEESimulator-RS_MapleSU_6.0.39_ksu.zip",
+  "version": "6.0.40_MapleSU",
+  "versionCode": 64000,
+  "zipUrl": "https://github.com/FengQiuFQ/TEESimulator-MapleSU/releases/download/v6.0.40/TEESimulator-RS_MapleSU_6.0.40_ksu.zip",
   "changelog": "https://raw.githubusercontent.com/FengQiuFQ/TEESimulator-MapleSU/main/CHANGELOG.md"
 }
