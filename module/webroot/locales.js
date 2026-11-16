@@ -84,6 +84,8 @@ TEEI18N.define("zh-CN", {
 
         "compat.title": "兼容性检查",
         "compat.recheck": "重新检查",
+        "compat.run": "开始检查",
+        "compat.idle": "检查要几秒。当前管理器运行命令时页面会停止响应，所以不会自动检查。",
         "compat.running": "检查中…",
         "compat.allClear": "没有需要注意的问题",
         "compat.showAll": { other: "显示全部 {count} 项" },
@@ -424,6 +426,8 @@ TEEI18N.define("en", {
 
         "compat.title": "Compatibility check",
         "compat.recheck": "Check again",
+        "compat.run": "Run check",
+        "compat.idle": "The check takes a few seconds. This manager stops the page from responding while a command runs, so it does not start by itself.",
         "compat.running": "Checking…",
         "compat.allClear": "Nothing needs attention",
         "compat.showAll": { one: "Show {count} item", other: "Show all {count} items" },

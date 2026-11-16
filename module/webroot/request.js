@@ -40,17 +40,46 @@ function asBackendError(err, fallbackCode) {
 }
 
 /* ------------------------------ ksu.exec bridge --------------------------- */
-/* Handles the callback, synchronous and Promise forms of ksu.exec. The callback is
-   window[name](errno, stdout, stderr). */
+/* On KernelSU the callback form of ksu.exec is a synchronous JavaBridge call: the page
+   cannot react to anything until the command has finished. Loading the page runs a dozen
+   commands, the app list and the compatibility check among them, so it stopped answering
+   taps for many seconds. ksu.spawn returns at once and reports the output line by line,
+   so it is used whenever the bridge has it and it answers.
+
+   The first command finds that out, and the others wait for it. When spawn is missing,
+   throws or never answers, every command goes through ksu.exec as before, in its
+   callback, synchronous or Promise form; the callback is window[name](errno, stdout,
+   stderr). */
 const KsuExec = (() => {
     const CALLBACK_TIMEOUT_MS = 8000;
+    /* How long the first command waits for spawn before ksu.exec takes over. */
+    const SPAWN_PROBE_MS = 5000;
+    /* Spawned commands run side by side; a few at a time keep the device itself smooth. */
+    const MAX_SPAWNED = 4;
+    /* Output can still arrive after a timeout; it lands here and goes nowhere. */
+    const SINK = { stdout: { emit: () => {} }, stderr: { emit: () => {} }, emit: () => {} };
     let seq = 0;
     /* null until the bridge shows which form works: true once any callback arrived,
        false once only the synchronous form answered. */
     let callbacks = null;
+    /* null until known: true once spawn delivered output or an exit code, false when it
+       is missing, throws or did not answer the first command. */
+    let spawnWorks = null;
+    let probing = null;
+    let running = 0;
+    const waiting = [];
 
     function available() {
         return !!(window.ksu && typeof window.ksu.exec === "function");
+    }
+
+    function spawnUsable() {
+        return spawnWorks !== false && !!(window.ksu && typeof window.ksu.spawn === "function");
+    }
+
+    /* True once commands are known to run without holding up the page. */
+    function nonBlocking() {
+        return spawnWorks === true;
     }
 
     /* Every value that enters a command goes through this. */
@@ -58,8 +87,134 @@ const KsuExec = (() => {
         return "'" + String(value).replace(/'/g, "'\\''") + "'";
     }
 
-    function execText(cmd, options) {
+    /* options.timeout in ms; options.readOnly marks a command that is safe to run twice,
+       which lets the first one fall back to ksu.exec when spawn does not answer. */
+    async function execText(cmd, options) {
         const timeoutMs = Math.max(1000, Number(options && options.timeout) || CALLBACK_TIMEOUT_MS);
+        while (probing) {
+            try { await probing; } catch (e) { /* reported to its own caller */ }
+        }
+        if (!spawnUsable()) return execBlocking(cmd, timeoutMs);
+        if (spawnWorks === true) return limited(() => spawnText(cmd, timeoutMs, false));
+        const attempt = spawnText(cmd, timeoutMs, true);
+        probing = attempt;
+        try {
+            return await attempt;
+        } catch (err) {
+            /* A throw means the command never started. Silence may mean it ran, so only a
+               read is repeated; a write reports the failure instead of running twice. */
+            if (err && (err.notStarted || (err.noAnswer && options && options.readOnly))) {
+                return execBlocking(cmd, timeoutMs);
+            }
+            throw err;
+        } finally {
+            if (probing === attempt) probing = null;
+        }
+    }
+
+    function limited(task) {
+        return new Promise((resolve, reject) => {
+            const start = () => {
+                running += 1;
+                const done = () => {
+                    running -= 1;
+                    const next = waiting.shift();
+                    if (next) next();
+                };
+                let run;
+                try { run = task(); } catch (e) { run = Promise.reject(e); }
+                run.then((value) => { done(); resolve(value); }, (e) => { done(); reject(e); });
+            };
+            if (running < MAX_SPAWNED) start();
+            else waiting.push(start);
+        });
+    }
+
+    /* KernelSU: spawn(command, argsJson, optionsJson, name), then name.stdout.emit("data",
+       line) and name.stderr.emit("data", line) per line, name.emit("exit", code), and
+       name.emit("error", err) after a non-zero code. Every event is its own task. */
+    function spawnText(cmd, timeoutMs, probe) {
+        return new Promise((resolve, reject) => {
+            const name = "__mplKsuSpawn" + (++seq);
+            const out = [];
+            const err = [];
+            const started = Date.now();
+            let settled = false;
+            let timer = 0;
+            const finish = (error, text) => {
+                if (settled) return;
+                settled = true;
+                if (timer) clearTimeout(timer);
+                window[name] = SINK;
+                setTimeout(() => {
+                    if (window[name] !== SINK) return;
+                    try { delete window[name]; } catch (e) { window[name] = undefined; }
+                }, 60000);
+                if (error) reject(error);
+                else resolve(text);
+            };
+            const stream = (list) => ({
+                emit: (event, data) => {
+                    if (event !== "data" || settled) return;
+                    spawnWorks = true;
+                    list.push(data === undefined || data === null ? "" : String(data));
+                },
+            });
+            window[name] = {
+                stdout: stream(out),
+                stderr: stream(err),
+                emit: (event, data) => {
+                    if (event !== "exit" || settled) return;
+                    spawnWorks = true;
+                    if (timer) { clearTimeout(timer); timer = 0; }
+                    const code = Number(data) || 0;
+                    /* Lines are posted before the exit code; a turn of the event loop lets
+                       any that are still queued arrive first. */
+                    setTimeout(() => {
+                        const output = out.join("\n");
+                        if (code !== 0 && !output.trim()) {
+                            finish(backendError("exec", "errno=" + code +
+                                (err.length ? ": " + err.join("\n").slice(0, 200) : "")));
+                            return;
+                        }
+                        if (code !== 0 && err.length) {
+                            console.warn("[backend] ksu.spawn stderr:", err.join("\n").slice(0, 200));
+                        }
+                        finish(null, output);
+                    }, 0);
+                },
+            };
+            try {
+                window.ksu.spawn(cmd, "[]", "{}", name);
+            } catch (e) {
+                spawnWorks = false;
+                const fail = backendError("exec", "ksu.spawn: " + ((e && e.message) || String(e)));
+                fail.notStarted = true;
+                finish(fail);
+                return;
+            }
+            const check = () => {
+                timer = 0;
+                if (probe && spawnWorks === null) {
+                    spawnWorks = false;
+                    const fail = backendError("timeout", "ksu.spawn: no answer in " + (Date.now() - started) + " ms");
+                    fail.noAnswer = true;
+                    finish(fail);
+                    return;
+                }
+                const left = timeoutMs - (Date.now() - started);
+                if (left > 0) {
+                    timer = setTimeout(check, left);
+                    return;
+                }
+                finish(backendError("timeout", timeoutMs + " ms"));
+            };
+            timer = setTimeout(check, probe ? Math.min(timeoutMs, SPAWN_PROBE_MS) : timeoutMs);
+        });
+    }
+
+    /* ksu.exec: blocks the page for as long as the command runs on KernelSU. */
+    function execBlocking(cmd, timeoutMs) {
         return new Promise((resolve, reject) => {
             if (callbacks === false) {
                 try {
@@ -137,7 +292,7 @@ const KsuExec = (() => {
         });
     }
 
-    return { available, shellQuote, execText };
+    return { available, nonBlocking, shellQuote, execText };
 })();
 
 /* ------------------------------ module root ------------------------------- */
@@ -190,7 +345,7 @@ const ModuleRoot = (() => {
         const dirs = MODULE_ROOT_HINTS.slice();
         let listing = "";
         try {
-            listing = await KsuExec.execText("ls -1 /data/adb/modules 2>/dev/null");
+            listing = await KsuExec.execText("ls -1 /data/adb/modules 2>/dev/null", { readOnly: true });
         } catch (e) {
             listing = "";
         }
@@ -205,7 +360,7 @@ const ModuleRoot = (() => {
         let dex = "";
         let output = "";
         try {
-            output = await KsuExec.execText(probeScript(dirs));
+            output = await KsuExec.execText(probeScript(dirs), { readOnly: true });
         } catch (err) {
             throw backendError("exec", "module probe: " + (err && err.message));
         }
@@ -594,6 +749,12 @@ const Backend = (() => {
         return isKsu() ? "ksu" : "ultra";
     }
 
+    /* Whether a slow command leaves the page usable meanwhile: always over HTTP, and on
+       KSU once ksu.spawn has been seen to work. */
+    function nonBlocking() {
+        return !isKsu() || KsuExec.nonBlocking();
+    }
+
     function noteCapabilities(info) {
         const listOf = (value) => (Array.isArray(value) ? value.map((item) => String(item)) : null);
         if (!info || typeof info !== "object") return;
@@ -654,7 +815,7 @@ const Backend = (() => {
         capabilities = null;
     }
 
-    return { call, isKsu, mode, supports, noteCapabilities, describe, reset };
+    return { call, isKsu, mode, nonBlocking, supports, noteCapabilities, describe, reset };
 })();
 
 /* ------------------------------ normalisers ------------------------------- */

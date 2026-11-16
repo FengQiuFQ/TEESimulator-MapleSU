@@ -1279,6 +1279,13 @@ function compatText(item) {
     return t(key, params);
 }
 
+/* The card with its button, without running the check. */
+function offerCompat() {
+    const s = state.compat;
+    s.hidden = !Backend.isKsu() || Backend.supports("compat") === false;
+    renderCompat();
+}
+
 async function runCompat() {
     const s = state.compat;
     if (!Backend.isKsu() || Backend.supports("compat") === false) {
@@ -1340,9 +1347,13 @@ function renderCompat() {
 
     const chip = $("compat-chip");
     const summary = $("compat-summary");
+    const run = $("compat-run");
+    run.setAttribute("data-i18n", s.data || s.status === "error" ? "compat.recheck" : "compat.run");
+    if (!run.dataset.busyKey) run.textContent = t(run.getAttribute("data-i18n"));
     if (!s.data) {
         setChip(chip, null, "");
-        summary.hidden = true;
+        summary.textContent = s.status === "idle" ? t("compat.idle") : "";
+        summary.hidden = s.status !== "idle";
     } else {
         if (errors) setChip(chip, "err", t("compat.chipError", { count: errors }));
         else if (warnings) setChip(chip, "warn", t("compat.chipWarn", { count: warnings }));
@@ -1663,9 +1674,14 @@ async function refreshPage() {
         reload.disabled = false;
         renderStatus();
     }
-    /* Runs once per page, since it has its own button. Waiting for the app list as well
-       would make this card appear late and push the page down under the user's finger. */
-    if (state.compat.status === "idle") runCompat();
+    /* Runs once per page, since it has its own button. It takes seconds, so it starts on
+       its own only where the page stays usable meanwhile; elsewhere the card waits for its
+       button. Waiting for the app list as well would make this card appear late and push
+       the page down under the user's finger. */
+    if (state.compat.status === "idle") {
+        if (Backend.nonBlocking()) runCompat();
+        else offerCompat();
+    }
     await scope;
     renderStatus();
 }
