@@ -88,6 +88,8 @@ public final class SoterBridge {
     private static final int BIND_AUTO_CREATE = 1;
     private static final long POLL_MS = 5000L;
     private static final long HEARTBEAT_MS = 15000L;
+    /** A heartbeat identical to the previous one waits this long. */
+    private static final long HEARTBEAT_IDLE_MS = 5L * 60L * 1000L;
     private static final long BIND_RETRY_MS = 5000L;
     /** w4/e registers 13 transactions (the device AIDL has 13 methods). */
     private static final int CODES = 13;
@@ -103,10 +105,12 @@ public final class SoterBridge {
     private static volatile IBinder target;
     private static volatile IBinder backdoor;
     private static volatile boolean registered;
-    private static String lastNote;
+    /** Notes (and the bind outcome) are logged once per change of state, see {@link LogGate}. */
+    private static final LogGate NOTES = new LogGate();
     private static String targetRoute;
     private static String fileVerdict;
     private static long lastBeat;
+    private static String lastBeatKey;
     private static boolean managerSeen;
 
     // --- p16socket: binder-free fallback -------------------------------------
@@ -263,12 +267,14 @@ public final class SoterBridge {
         Intent intent = new Intent(SOTER_DESCRIPTOR).setPackage(SOTER_PACKAGE);
         try {
             boolean bound = ctx.bindService(intent, BIND_AUTO_CREATE, executor, connection);
+            // Retried every BIND_RETRY_MS while no binding arrives: journal the outcome
+            // once, not on every retry.
             if (!bound) {
                 bindNote = "bindService=false";
-                journal("direct bind refused (bindService=false); using provider legs");
+                journalOnce("direct bind refused (bindService=false); using provider legs");
             } else {
                 bindNote = "bind requested";
-                journal("direct bind requested (keep-alive)");
+                journalOnce("direct bind requested (keep-alive)");
             }
         } catch (Throwable error) {
             bindSupported = false;
@@ -472,6 +478,7 @@ public final class SoterBridge {
         probeStreak = 0;
         lastProbeAt = 0L;
         lastSelfTest = "not run (" + why + ")";
+        NOTES.forget();
         note(why);
     }
 
@@ -762,20 +769,20 @@ public final class SoterBridge {
         }
     }
 
-    /** One line per change plus a 15 s heartbeat, so "nothing happened" is also evidence. */
+    /**
+     * One line per change plus a heartbeat, so "nothing happened" is also evidence: every
+     * 15 s while the line changes, every {@link #HEARTBEAT_IDLE_MS} while it repeats itself
+     * word for word (a lane waiting for the Soter service to start).
+     */
     private static void heartbeat() {
         heartbeat(null);
     }
 
     private static void heartbeat(String reason) {
         long now = System.currentTimeMillis();
-        if (reason == null && now - lastBeat < HEARTBEAT_MS) {
+        if (now - lastBeat < HEARTBEAT_MS) {
             return;
         }
-        if (reason != null && now - lastBeat < HEARTBEAT_MS) {
-            return;
-        }
-        lastBeat = now;
         String line = "hb route=" + targetRoute
                 + " registered=" + (registered ? CODES : 0)
                 + " selftest=[" + lastSelfTest + "]"
@@ -788,6 +795,12 @@ public final class SoterBridge {
                 + " " + SoterInjector.status()
                 + (probeWhy == null ? "" : " why=" + probeWhy)
                 + (reason == null ? "" : " note=" + reason);
+        String key = LogGate.key(line);
+        if (key.equals(lastBeatKey) && now - lastBeat < HEARTBEAT_IDLE_MS) {
+            return;
+        }
+        lastBeat = now;
+        lastBeatKey = key;
         Log.i(TAG, "bridge " + line);
         journal("bridge " + line);
     }
@@ -1310,12 +1323,22 @@ public final class SoterBridge {
         return (high << 32) | low;
     }
 
-    /** One line per state change, never per poll. */
+    /**
+     * One line per state change, never per poll. A failing poll notes several different
+     * things in turn (ams leg, resolver leg, socket fallback), so remembering only the last
+     * line was not enough: {@link #NOTES} remembers each one.
+     */
     private static void note(String message) {
-        if (!message.equals(lastNote)) {
-            lastNote = message;
+        if (NOTES.admit(message)) {
             Log.i(TAG, "bridge: " + message);
             journal("bridge: " + message);
+        }
+    }
+
+    /** {@link #journal} for an outcome that repeats on every retry. */
+    private static void journalOnce(String message) {
+        if (NOTES.admit(message)) {
+            journal(message);
         }
     }
 
@@ -1357,6 +1380,8 @@ public final class SoterBridge {
             return;
         }
         publishedRoute = route;
+        // A new route is a new state: what failed before it is worth saying again.
+        NOTES.forget();
         String line = "route=" + route
                 + " registered=" + (registered ? CODES : 0)
                 + " proto=" + SoterSocket.PROTO

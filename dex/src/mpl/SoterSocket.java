@@ -122,6 +122,20 @@ public final class SoterSocket {
     private static final AtomicInteger TX_FALLBACK = new AtomicInteger();
     private static final AtomicInteger ERRORS = new AtomicInteger();
     private static final AtomicInteger RECONNECTS = new AtomicInteger();
+    /**
+     * While the Soter service is down every retry fails the same way. Until a session
+     * registers, each line of the connect path is logged once per ten minutes (see
+     * {@link LogGate}), not once per {@link #RETRY_MS}.
+     */
+    private static final LogGate CHANNEL_LOG = new LogGate();
+    /**
+     * A channel that has never come up is waiting for the library (info); one that was
+     * registered and went away has lost its forge (warning).
+     */
+    private static volatile boolean everRegistered;
+    /** Failed attempts since the last registration, reported when the channel comes back. */
+    private static final AtomicInteger FAILED = new AtomicInteger();
+    private static volatile long failingSince;
 
     private SoterSocket() {
     }
@@ -218,7 +232,19 @@ public final class SoterSocket {
                 serve(in, out);
             } catch (Throwable error) {
                 lastError = describe(error);
-                Log.w(TAG, "socket channel: " + lastError);
+                // A live session that ends is a drop, not a failed attempt.
+                if (!registered && FAILED.getAndIncrement() == 0) {
+                    failingSince = System.nanoTime();
+                }
+                if (CHANNEL_LOG.admit(lastError)) {
+                    String line = "socket channel: " + lastError + " (retrying every " + RETRY_MS
+                            + " ms, repeats logged every " + (LogGate.QUIET_MS / 60000L) + " min)";
+                    if (everRegistered) {
+                        Log.w(TAG, line);
+                    } else {
+                        Log.i(TAG, line);
+                    }
+                }
             } finally {
                 registered = false;
                 live = null;
@@ -248,7 +274,7 @@ public final class SoterSocket {
             socket.connect(new LocalSocketAddress(NAME, LocalSocketAddress.Namespace.ABSTRACT));
             pathKind = 0;
             socket.setSoTimeout(READ_TIMEOUT_MS);
-            Log.i(TAG, "socket connected @" + NAME);
+            info("socket connected @" + NAME);
             return socket;
         } catch (IOException error) {
             first = error;
@@ -259,7 +285,7 @@ public final class SoterSocket {
             fallback.connect(new LocalSocketAddress(PATH, LocalSocketAddress.Namespace.FILESYSTEM));
             pathKind = 1;
             fallback.setSoTimeout(READ_TIMEOUT_MS);
-            Log.i(TAG, "socket connected " + PATH);
+            info("socket connected " + PATH);
             return fallback;
         } catch (IOException error) {
             closeQuietly(fallback);
@@ -291,7 +317,7 @@ public final class SoterSocket {
         if (proto != PROTO) {
             throw new IOException("protocol mismatch: lib=" + proto + " client=" + PROTO);
         }
-        Log.i(TAG, "socket handshake ok lib_ver=" + libVersion + " target_pid=" + pid
+        info("socket handshake ok lib_ver=" + libVersion + " target_pid=" + pid
                 + " target_uid=" + uid + " path=" + (libPathKind == 0 ? "abstract" : "file")
                 + " gen=" + generation);
     }
@@ -317,8 +343,23 @@ public final class SoterSocket {
         }
         registered = true;
         registeredAt = System.currentTimeMillis();
+        // The attempts the gate kept out of the log, summed up now that they are over.
+        int failed = FAILED.getAndSet(0);
+        String waited = failed == 0 ? "" : " after " + failed + " failed attempt"
+                + (failed == 1 ? "" : "s") + " in "
+                + ((System.nanoTime() - failingSince) / 1000000000L) + " s";
         Log.i(TAG, "SOTER socket registered codes=" + accepted + " mask=0x"
-                + Integer.toHexString(mask) + " route=socket");
+                + Integer.toHexString(mask) + " route=socket" + waited);
+        everRegistered = true;
+        // A working session: whatever happens next is news again.
+        CHANNEL_LOG.forget();
+    }
+
+    /** A line of the connect path; a library that keeps dropping us repeats them. */
+    private static void info(String line) {
+        if (CHANNEL_LOG.admit(line)) {
+            Log.i(TAG, line);
+        }
     }
 
     private static void serve(InputStream in, OutputStream out) throws IOException {

@@ -55,6 +55,8 @@ public final class SoterInjector {
     private static volatile int scopePid = -1;
     private static volatile long lastWarmAt;
     private static final long WARM_INTERVAL_MS = 60_000L;
+    /** The next time the service is down, its first warm-up is news again. */
+    private static final LogGate WARM_LOG = new LogGate();
     private static volatile long scopeStamp = Long.MIN_VALUE;
     private static volatile String lastScopeNote;
     private static volatile Integer cachedUid;
@@ -123,6 +125,7 @@ public final class SoterInjector {
             return;
         }
         lastSeenPid = pid;
+        WARM_LOG.forget();
         // The in-process gate (mpl.SoterPolicy) can only read the service's own files dir,
         // so the scope list is pushed here - before the library is mapped - and again after
         // every restart, because a new process starts with whatever the last one left.
@@ -637,8 +640,14 @@ public final class SoterInjector {
                 + "am start-service -n $c --user 0 >/dev/null 2>&1 || "
                 + "cmd activity start-service -n $c --user 0 >/dev/null 2>&1; done";
         int code = exec(script);
-        file("warm-up rc=" + code);
-        Log.i(TAG, "injector: warm-up attempt rc=" + code);
+        // Repeats every minute while the service stays down: log each outcome once.
+        String line = "warm-up rc=" + code;
+        if (WARM_LOG.admit(line)) {
+            file(line);
+            Log.i(TAG, "injector: warm-up attempt rc=" + code + " (every "
+                    + (WARM_INTERVAL_MS / 1000L) + " s while the service is down, repeats logged every "
+                    + (LogGate.QUIET_MS / 60000L) + " min)");
+        }
     }
 
     private static int exec(String script) {
