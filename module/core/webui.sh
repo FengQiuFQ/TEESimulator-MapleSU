@@ -1195,10 +1195,14 @@ unwrap_keybox() {
 
 # curl -> wget -> toybox wget, exactly the C++ fallback chain. Prints the
 # attempt trail on stdout; returns 0 only when a non-empty file was written.
+# wget -T only bounds each read and toybox wget has no limit at all, so both run under
+# timeout: a stalled server would otherwise hold the target watcher forever.
 download_to() {
     _u=$1
     _d=$2
     _trail=
+    _limit=
+    command -v timeout >/dev/null 2>&1 && _limit="timeout 60"
     rm -f "$_d" 2>/dev/null
     if command -v curl >/dev/null 2>&1; then
         curl -fsSL --connect-timeout 10 --max-time 25 -o "$_d" "$_u" 2>/dev/null
@@ -1211,7 +1215,7 @@ download_to() {
     fi
     rm -f "$_d" 2>/dev/null
     if command -v wget >/dev/null 2>&1; then
-        wget -q -T 25 -O "$_d" "$_u" 2>/dev/null
+        $_limit wget -q -T 25 -O "$_d" "$_u" 2>/dev/null
         _c=$?
         _trail="$_trail,wget=$_c"
         if [ "$_c" -eq 0 ] && [ -s "$_d" ]; then printf '%s' "$_trail"; return 0; fi
@@ -1220,7 +1224,7 @@ download_to() {
     fi
     rm -f "$_d" 2>/dev/null
     if command -v toybox >/dev/null 2>&1; then
-        toybox wget -q -O "$_d" "$_u" 2>/dev/null
+        $_limit toybox wget -q -O "$_d" "$_u" 2>/dev/null
         _c=$?
         _trail="$_trail,toybox-wget=$_c"
         if [ "$_c" -eq 0 ] && [ -s "$_d" ]; then printf '%s' "$_trail"; return 0; fi
@@ -1258,7 +1262,9 @@ kbu_perform_update() {
         if [ "$_kbu_rc" -ne 0 ]; then
             _reason="download_failed($_trail)"
         else
-            _xml="$KBU_TMP.xml"
+            # Not *.xml: the daemon watches this directory and treats every *.xml written,
+            # moved in or deleted there as a keybox, dropping its patched certificate chains.
+            _xml="$KBU_TMP.unwrapped"
             if ! unwrap_keybox "$KBU_TMP" "$_xml"; then
                 _reason='invalid_keybox:not_xml'
             else
@@ -1561,7 +1567,7 @@ set_debug() {
 # Collect a trimmed, redacted diagnostic bundle. Returns the path plus a short
 # preview so the WebUI can show something even when it cannot open files.
 cmd_logs() {
-    _dir=/sdcard/Download
+    _dir=${WEBUI_KSU_DIAG_DIR:-/sdcard/Download}
     [ -d "$_dir" ] || _dir=/data/local/tmp
     _stamp=$(date +%Y%m%d-%H%M%S 2>/dev/null)
     _out="$_dir/teesim-diag-$_stamp.txt"
@@ -1587,9 +1593,14 @@ cmd_logs() {
                 "$(wc -c < "$KEYBOX_XML_DST" 2>/dev/null | tr -d ' ')" \
                 "$(short_sha "$(sha256_file "$KEYBOX_XML_DST" 2>/dev/null)" 2>/dev/null)"
         else
+            # A missing file must not reach the shell's own "can't open" message, which
+            # 2>/dev/null after the < does not catch.
+            _kb_size=0
+            if [ -f "$KEYBOX_XML_DST" ]; then
+                _kb_size=$(wc -c 2>/dev/null < "$KEYBOX_XML_DST" | tr -d ' ')
+            fi
             printf 'installed=no (probe: exists=%s size=%s)\n' \
-                "$([ -e "$KEYBOX_XML_DST" ] && echo yes || echo no)" \
-                "$(wc -c < "$KEYBOX_XML_DST" 2>/dev/null | tr -d ' ' || echo 0)"
+                "$([ -e "$KEYBOX_XML_DST" ] && echo yes || echo no)" "${_kb_size:-0}"
         fi
         printf '\n[targets]\n'; grep -vc '^#' "$CONFIG_DIR/target.txt" 2>/dev/null
         printf '\n[target_refresh]\n'; cat "$CONFIG_DIR/target_refresh" 2>/dev/null
@@ -1602,7 +1613,12 @@ cmd_logs() {
         printf '\n[soter process]\n'
         pidof com.tencent.soter.soterserver 2>/dev/null || echo not-running
         printf '\n[soter_scope]\n'
-        wc -l < "/data/user/0/com.tencent.soter.soterserver/files/soter_scope" 2>/dev/null
+        _scope=/data/user/0/com.tencent.soter.soterserver/files/soter_scope
+        if [ -f "$_scope" ]; then
+            printf 'lines=%s\n' "$(wc -l 2>/dev/null < "$_scope" | tr -d ' ')"
+        else
+            echo 'absent (every app)'
+        fi
         printf '\n[injection]\n'
         _ks=$(pidof keystore2 2>/dev/null)
         printf 'keystore2=%s maps=%s\n' "$_ks" \

@@ -535,5 +535,46 @@ conf interval_hours=0 "last_check_epoch=$OLD" "installed_sha256=$(file_sha "$C/k
 check "boot: interval 0 checks on boot"         is "$(boot_step)" ok
 check "boot: and the watcher does not repeat it" is "$(W kbu-tick >/dev/null; downloads)" 1
 
+# --- what the daemon sees -----------------------------------------------------------------
+
+# The daemon watches the config directory and treats every *.xml written, moved in or
+# deleted there as a keybox, dropping its patched certificate chains. An update may show
+# it keybox.xml and nothing else. chmod runs on the unpacked file just before it is moved
+# into place, so a listing taken there includes it.
+setup update_temp_names
+printf '#!/bin/sh\nls "$FAKE/cfg" >> "$FAKE/cfg.ls"\nexec %s "$@"\n' "$(command -v chmod)" > "$S/bin/chmod"
+chmod +x "$S/bin/chmod"
+W kbu-tick >/dev/null
+check "update: the listing caught the unpacked file" has "$(cat "$S/cfg.ls" 2>/dev/null)" keybox.xml.download.tmp.
+check "update: no other *.xml in the watched directory" \
+    is "$(grep '\.xml$' "$S/cfg.ls" 2>/dev/null | grep -vx keybox.xml)" ""
+check "update: still installs the download"     is "$(device_id)" third_party
+
+# --- diagnostic export ------------------------------------------------------------------
+
+# A file that is not there must give a plain line. The shell's own "can't open" for a
+# missing < redirection target is not caught by a 2>/dev/null written after it.
+shell_errors() { printf '%s\n' "$1" | grep -iE "can't open|cannot open|no such file" || true; }
+export_text() { # runs the export and prints the file it wrote
+    local out path
+    out=$(export WEBUI_KSU_DIAG_DIR="$S/diag"; W logs)
+    path=$(printf '%s' "$out" | sed -n 's/.*"path":"\([^"]*\)".*/\1/p')
+    case $path in "$S/diag/"*) cat "$path" ;; *) echo "export failed: $out" ;; esac
+}
+setup logs_missing_files
+mkdir -p "$S/diag"
+printf '#!/bin/sh\nexit 0\n' > "$S/bin/logcat"
+printf '#!/bin/sh\nexit 1\n' > "$S/bin/pidof"
+chmod +x "$S/bin/logcat" "$S/bin/pidof"
+text=$(export_text)
+check "logs: the export is written"             has "$text" "[keybox live]"
+check "logs: a missing keybox.xml reads as size 0" has "$text" "installed=no (probe: exists=no size=0)"
+check "logs: a missing soter_scope reads as every app" has "$text" "absent (every app)"
+check "logs: no shell error in the export"      is "$(shell_errors "$text")" ""
+keybox third_party > "$C/keybox.xml"
+text=$(export_text)
+check "logs: an installed keybox shows its size" has "$text" "installed=yes size=$(wc -c < "$C/keybox.xml" | tr -d ' ') "
+check "logs: still no shell error"              is "$(shell_errors "$text")" ""
+
 echo "webui backend tests: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
