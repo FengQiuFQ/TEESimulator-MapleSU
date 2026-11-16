@@ -191,16 +191,35 @@ add() {
 # import more from their own partitions (my_*, mi_ext, per-SKU files), so this globs
 # them instead of naming them. Reading a file init skips only makes a value look native,
 # which errs on the side of not blaming a module.
+#
+# Directories that are not partitions are skipped before their contents are listed, so
+# the check never walks /proc or reads the user's shared storage.
+not_a_partition() {
+    case ${1#"$FS_ROOT"} in
+        /data|/data_mirror|/sdcard|/storage|/mnt|/cache|/metadata|/debug_ramdisk|/proc|/sys|/dev) return 0 ;;
+    esac
+    return 1
+}
+
 native_prop_files() {
-    for _f in "$FS_ROOT"/*.prop "$FS_ROOT"/*/*.prop "$FS_ROOT"/*/etc/*.prop \
-              "$FS_ROOT"/vendor/odm/*.prop "$FS_ROOT"/vendor/odm/etc/*.prop \
-              "$FS_ROOT"/system/system_ext/etc/*.prop "$FS_ROOT"/system/product/etc/*.prop; do
-        [ -r "$_f" ] || continue
-        case ${_f#"$FS_ROOT"} in
-            /data/*|/data_mirror/*|/sdcard/*|/storage/*|/mnt/*|/cache/*|/metadata/*|/debug_ramdisk/*|/proc/*|/sys/*|/dev/*) continue ;;
-        esac
-        printf '%s\n' "$_f"
+    for _f in "$FS_ROOT"/*.prop; do
+        [ -r "$_f" ] && printf '%s\n' "$_f"
     done
+    # Two passes keep the order of the plain globs: /*/*.prop first, then /*/etc/*.prop.
+    for _sub in '' /etc; do
+        for _top in "$FS_ROOT"/*; do
+            not_a_partition "$_top" && continue
+            [ -d "$_top$_sub" ] || continue
+            for _f in "$_top$_sub"/*.prop; do
+                [ -r "$_f" ] && printf '%s\n' "$_f"
+            done
+        done
+    done
+    for _f in "$FS_ROOT"/vendor/odm/*.prop "$FS_ROOT"/vendor/odm/etc/*.prop \
+              "$FS_ROOT"/system/system_ext/etc/*.prop "$FS_ROOT"/system/product/etc/*.prop; do
+        [ -r "$_f" ] && printf '%s\n' "$_f"
+    done
+    return 0
 }
 
 # ro.boot.* comes from the kernel command line or bootconfig, not from a partition.
@@ -535,8 +554,12 @@ check_keybox() {
 # every host would look unreachable. With no input, nc keeps waiting once it has
 # connected, so running out of time counts as reachable; -w makes a failed connect
 # exit with an error first.
-probe_rkp() {
+#
+# An unreachable server costs the full 4 seconds, so the probe runs in the background
+# while the modules are scanned: rkp_start starts it, rkp_finish collects the result.
+rkp_start() {
     RKP_STATE=unknown
+    RKP_PID=
     RKP_HOST=$(getprop remote_provisioning.hostname 2>/dev/null)
     if [ -z "$RKP_HOST" ]; then
         if [ "$(getprop ro.build.version.sdk 2>/dev/null)" -ge 34 ] 2>/dev/null; then
@@ -547,11 +570,18 @@ probe_rkp() {
     fi
     command -v nc >/dev/null 2>&1 || return 0
     command -v timeout >/dev/null 2>&1 || return 0
-    timeout 4 nc -w 2 "$RKP_HOST" 443 </dev/null >/dev/null 2>&1
+    timeout 4 nc -w 2 "$RKP_HOST" 443 </dev/null >/dev/null 2>&1 &
+    RKP_PID=$!
+}
+
+rkp_finish() {
+    [ -n "$RKP_PID" ] || return 0
+    wait "$RKP_PID"
     case $? in
         0|124|143) RKP_STATE=reachable ;;
         *) RKP_STATE=blocked ;;
     esac
+    RKP_PID=
 }
 
 check_rkp() {
@@ -586,8 +616,23 @@ check_rkp() {
     fi
 }
 
+# Asked once: pm goes through system_server, which can be slow while the device is busy.
+SOTER_INSTALLED=
+soter_installed() {
+    if [ -z "$SOTER_INSTALLED" ]; then
+        _limit=
+        command -v timeout >/dev/null 2>&1 && _limit="timeout 10"
+        if $_limit pm path "$SOTER_PKG" >/dev/null 2>&1; then
+            SOTER_INSTALLED=1
+        else
+            SOTER_INSTALLED=0
+        fi
+    fi
+    [ "$SOTER_INSTALLED" = 1 ]
+}
+
 check_soter() {
-    if pm path "$SOTER_PKG" >/dev/null 2>&1; then
+    if soter_installed; then
         add ok soter_ok
     else
         add info soter_missing
@@ -620,7 +665,7 @@ check_runtime() {
             | grep -v libTEESimulator | awk '{print $6}' | sed 's#.*/##' | sort -u | head -n 1)
         [ -n "$_other" ] && add warn injected_other "$_other"
     fi
-    pm path "$SOTER_PKG" >/dev/null 2>&1 || return 0
+    soter_installed || return 0
     _sp=$(pidof "$SOTER_PKG" 2>/dev/null | cut -d' ' -f1)
     _reg=$(sed -n 's/.*registered=\([0-9]*\).*/\1/p' "$CONFIG_DIR/soter_route" 2>/dev/null | head -n 1)
     if [ -z "$_sp" ]; then
@@ -634,9 +679,10 @@ check_runtime() {
     fi
 }
 
-probe_rkp
+rkp_start
 check_platform
 scan_modules
+rkp_finish
 check_props
 check_keybox
 check_rkp
