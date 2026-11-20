@@ -4,6 +4,8 @@
 #   compat.sh --install   readable lines, without the checks that need a booted module
 #   compat.sh --text      readable lines, all checks
 #   compat.sh --json      one JSON line, all checks (the default)
+#   compat.sh --conflicts the ids of the other enabled keystore2 simulators, one line;
+#                         service.sh starts no daemon when it is not empty
 #
 # The check only reports: it never changes the device and it never blocks an
 # install. It reads keybox.xml for the leaf certificate dates only; private keys
@@ -24,11 +26,12 @@
 #   a b c  plain values shown inside that text
 #
 # COMPAT_FS_ROOT points every device path at a fake root for tools/test_compat.sh.
+# COMPAT_SELF_ID is this module's directory name when it is not the usual one.
 
 FS_ROOT=${COMPAT_FS_ROOT:-}
 MODROOT=$FS_ROOT/data/adb/modules
 CONFIG_DIR=${WEBUI_KSU_CONFIG_DIR:-$FS_ROOT/data/adb/tricky_store}
-SELF_ID=tricky_store
+SELF_ID=${COMPAT_SELF_ID:-tricky_store}
 REPORT=$CONFIG_DIR/compat_report.json
 MIN_SDK=29
 SOTER_PKG=com.tencent.soter.soterserver
@@ -209,8 +212,10 @@ kernel_props() {
         | sed -e 's/ = /=/g' -e 's/"//g' | tr ' ' '\n' | sed -n 's/^androidboot\./ro.boot./p'
 }
 
-NATIVE_FILES=$(native_prop_files)
-KERNEL_PROPS=$(kernel_props)
+if [ "$MODE" != --conflicts ]; then
+    NATIVE_FILES=$(native_prop_files)
+    KERNEL_PROPS=$(kernel_props)
+fi
 
 native_lines() {
     printf '%s\n' "$KERNEL_PROPS"
@@ -280,10 +285,26 @@ prop_state() {
     return 0
 }
 
-# Another keystore2 simulator. Matched on the simulators' own ids and names, because
-# helpers such as Tricky Addon carry a similar name but only edit target.txt.
+# Another keystore2 simulator: a module that would inject into keystore2 beside this
+# one, so the two hooks fight. Judged by what the module ships, plus the ids and names
+# the simulators use for themselves. Never by its description: managers and helpers
+# (Tricky Addon, toolboxes) name the simulators they manage there, but only edit
+# keybox.xml or target.txt and inject nothing.
 is_simulator() {
-    [ -e "$1/libTEESimulator.so" ] && return 0
+    # The library a simulator injects.
+    for _f in "$1"/libTEESimulator.so "$1"/*/libTEESimulator.so "$1"/*/*/libTEESimulator.so \
+              "$1"/libtricky_store.so "$1"/*/libtricky_store.so "$1"/*/*/libtricky_store.so; do
+        [ -f "$_f" ] && return 0
+    done
+    # An injector, when something the module ships names keystore2 as what it targets.
+    for _f in "$1"/inject "$1"/*/inject "$1"/*/*/inject \
+              "$1"/injector "$1"/*/injector "$1"/*/*/injector; do
+        [ -f "$_f" ] || continue
+        # "$1/" so a module installed as a symlink is searched too. One grep per file
+        # instead of "-exec {} +", which not every busybox build has.
+        find "$1/" -type f -exec grep -qF keystore2 {} \; -print 2>/dev/null | grep -q . && return 0
+        break
+    done
     case $(printf '%s' "$2" | tr 'A-Z' 'a-z') in
         tee_simulator*|teesimulator*|tricky_store*|trickystore*|trick_store*) return 0 ;;
     esac
@@ -332,6 +353,30 @@ prop_delta() {
     ' $NATIVE_FILES - "$1" 2>/dev/null
 }
 
+# Whether the root manager loads a module: one without module.prop is not loaded.
+is_loaded() {
+    [ -f "$1/module.prop" ] && module_enabled "$1"
+}
+
+# A simulator the root manager will start.
+is_conflict() {
+    is_loaded "$1" && is_simulator "$@"
+}
+
+# What service.sh reads to decide whether to start, so the boot guard and this report
+# never disagree about a module.
+list_conflicts() {
+    _out=
+    for _d in "$MODROOT"/*; do
+        [ -d "$_d" ] || continue
+        _id=${_d##*/}
+        [ "$_id" = "$SELF_ID" ] && continue
+        _name=$(sed -n 's/^name=//p' "$_d/module.prop" 2>/dev/null | head -n 1)
+        is_conflict "$_d" "$_id" "$_name" && _out="$_out $_id"
+    done
+    printf '%s\n' "${_out# }"
+}
+
 scan_modules() {
     _found=0
     for _d in "$MODROOT"/*; do
@@ -341,7 +386,7 @@ scan_modules() {
         _name=$(sed -n 's/^name=//p' "$_d/module.prop" 2>/dev/null | head -n 1)
         if is_simulator "$_d" "$_id" "$_name"; then
             _found=1
-            if module_enabled "$_d"; then
+            if is_loaded "$_d"; then
                 add error conflict "$_id"
             else
                 add info leftover "$_id"
@@ -633,6 +678,11 @@ check_runtime() {
         add info soter_idle
     fi
 }
+
+if [ "$MODE" = --conflicts ]; then
+    list_conflicts
+    exit 0
+fi
 
 probe_rkp
 check_platform

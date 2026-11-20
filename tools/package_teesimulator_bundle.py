@@ -886,9 +886,13 @@ set_status core "$_CORE_STATE"
 #      (MapleSU installs like that). If the manager clears that storage the link
 #      dangles, module.prop disappears and KSU silently treats the module as
 #      absent. We cannot even run in that state; recording it makes it visible.
-#   2. Another TEESimulator/TrickyStore module is enabled. Both daemons inject
-#      into keystore2, the hooks fight and keystore requests block/fail. Start
-#      only one: record the conflict and skip our daemon start.
+#   2. Another keystore2 simulator is enabled. Both daemons inject into
+#      keystore2, the hooks fight and keystore requests block/fail. Start only
+#      one: record the conflict and skip our daemon start.
+# Which modules count is decided by core/compat.sh --conflicts, the same rule the
+# compatibility report uses: by what a module ships (an injected library, or an
+# injector aimed at keystore2) and the simulators' own ids and names. Never by
+# the description, which managers fill with the names of what they manage.
 _SELF_ID=$(basename "$MODDIR" 2>/dev/null)
 if [ -n "$_SELF_ID" ] && [ -L "/data/adb/modules/$_SELF_ID" ]; then
     set_status install "symlink:$(readlink "/data/adb/modules/$_SELF_ID" 2>/dev/null)"
@@ -897,19 +901,12 @@ else
 fi
 
 _CONFLICTS=
-for _m in /data/adb/modules/*; do
-    [ -d "$_m" ] || continue
-    _mid=$(basename "$_m")
-    [ "$_mid" = "$_SELF_ID" ] && continue
-    [ -f "$_m/disable" ] && continue
-    [ -f "$_m/module.prop" ] || continue
-    _mname=$(sed -n 's/^name=//p' "$_m/module.prop" 2>/dev/null | sed -n '1p')
-    _mdesc=$(sed -n 's/^description=//p' "$_m/module.prop" 2>/dev/null | sed -n '1p')
-    case "$_mid $_mname" in
-        *tricky_store*|*TEESimulator*|*TrickyStore*) _CONFLICTS="$_CONFLICTS $_mid" ;;
-        *) case "$_mdesc" in *TEESimulator*|*TrickyStore*) _CONFLICTS="$_CONFLICTS $_mid" ;; esac ;;
-    esac
-done
+if [ -f "$MODDIR/core/compat.sh" ]; then
+    _CONFLICTS=$(COMPAT_SELF_ID="$_SELF_ID" sh "$MODDIR/core/compat.sh" --conflicts 2>/dev/null)
+    _CONFLICTS=${_CONFLICTS:+ $_CONFLICTS}
+else
+    log_msg "core/compat.sh missing: duplicate-instance check skipped"
+fi
 # Upgrading from our previous module id (teesimulator-rs -> tricky_store) would
 # otherwise leave two copies: the old dir keeps its own daemon alive. Neutralise
 # the legacy copy and stop its daemon before the conflict check.
