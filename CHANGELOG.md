@@ -2,12 +2,6 @@
 
 所有显著变更都会记录在这里。版本号与 Release tag 对应（`vX.Y.Z`）。
 
-## Unreleased
-
-- 修复开机冲突检测误判：`service.sh` 以前按 module.prop 的 description 做子串匹配，Tricky Store / TEESimulator 管理器、工具箱只要在描述里提到这两个词，就会被当成另一个 TEE 模块，本模块记录 `conflict=<id>` 后不启动 daemon。现在开机判定改由 `core/compat.sh --conflicts` 给出，和兼容性检查用同一套规则：看模块实际带的注入库、指向 keystore2 的注入器，以及模拟器自己的 id 和名称，不再看描述。只改 keybox.xml / target.txt 的管理器不会再拦住启动。
-- 同一套规则也能认出名字不叫 TrickyStore / TEESimulator、但同样注入 keystore2 的模块（带注入器，且脚本或库里指向 keystore2）。两者同时启用时本模块让出并记录 `conflict=<id>`，兼容性检查报同一个模块。只给其他进程注入的模块不算。
-- 没有 module.prop 的模块目录不会被加载，兼容性检查把它报为残留，开机检测也不再算它。
-
 ## v6.0.41 — 2026-11-20
 
 - 合并 PR #4：开机冲突检测改由 `core/compat.sh --conflicts` 判定，按模块实际携带的注入库/面向 keystore2 的注入器识别，不再看 `module.prop` 描述；没有 `module.prop` 的目录不算加载。
