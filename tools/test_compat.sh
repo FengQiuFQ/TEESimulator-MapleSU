@@ -378,6 +378,80 @@ has "helper: not a conflict" ok conflict_none
 hasnt "helper" conflict
 says "helper: shares the config directory" '"level":"info","key":"shares_config","a":"TA_utl"'
 
+# A manager whose description names every simulator it manages, and whose scripts edit
+# keybox.xml and target.txt and restart keystore2, still injects nothing.
+setup manager 200
+module duck-toolbox "Duck Toolbox"
+echo 'description=Android attestation toolbox: Tricky Store / TEESimulator / OhMyKeymint manager (a full Tricky Addon port), TrickyStore' >> "$M/module.prop"
+printf 'cp kb /data/adb/tricky_store/keybox.xml\ncp t /data/adb/tricky_store/target.txt\nkillall keystore2\n' > "$M/service.sh"
+mkdir -p "$M/bin"; printf '\177ELF rkp keystore2' > "$M/bin/rkptool"
+OUT=$(run --json)
+has "manager: not a conflict" ok conflict_none
+hasnt "manager" conflict
+says "manager: shares the config directory" '"level":"info","key":"shares_config","a":"duck-toolbox"'
+OUT=$(run --conflicts)
+check "manager: boot guard starts the daemon" "$([ -z "$OUT" ]; echo $?)"
+
+# An injector aimed at keystore2, whatever it is called (the OhMyKeymint layout).
+setup injector 200
+module custom_ks "Custom Keystore"
+mkdir -p "$M/libs/arm64-v8a"
+printf '\177ELF' > "$M/libs/arm64-v8a/inject"
+printf '\177ELF' > "$M/libs/arm64-v8a/libengine.so"
+printf '#!/system/bin/sh\npid=$(pidof keystore2)\n' > "$M/daemon-injector"
+OUT=$(run --json)
+has "injector: a conflict" error conflict
+OUT=$(run --conflicts)
+check "injector: boot guard steps aside" "$([ "$OUT" = custom_ks ]; echo $?)"
+# The target can also be named only inside a binary it ships.
+setup injector_bin 200
+module custom_ks "Custom Keystore"
+mkdir -p "$M/bin"
+printf '\177ELF' > "$M/bin/inject"
+printf '\177ELF android.system.keystore2.IKeystoreService' > "$M/bin/libhook.so"
+OUT=$(run --conflicts)
+check "injector named in a binary" "$([ "$OUT" = custom_ks ]; echo $?)"
+# Installed as a symlink into a manager's storage, the way MapleSU installs modules.
+setup injector_link 200
+mkdir -p "$S/store/linked_ks/libs/arm64-v8a"
+printf 'id=linked_ks\nname=Linked Keystore\n' > "$S/store/linked_ks/module.prop"
+printf '\177ELF' > "$S/store/linked_ks/libs/arm64-v8a/inject"
+printf '#!/system/bin/sh\npidof keystore2\n' > "$S/store/linked_ks/daemon-injector"
+ln -s "$S/store/linked_ks" "$R/data/adb/modules/linked_ks"
+OUT=$(run --conflicts)
+check "injector installed as a symlink" "$([ "$OUT" = linked_ks ]; echo $?)"
+# An injector aimed at some other process is none of this module's business.
+setup injector_other 200
+module fps_tool "FPS Tool"
+printf '\177ELF' > "$M/inject"
+printf '#!/system/bin/sh\n./inject $(pidof surfaceflinger) libfps.so\n' > "$M/service.sh"
+OUT=$(run --json)
+hasnt "injector for another process" conflict
+OUT=$(run --conflicts)
+check "injector for another process: daemon starts" "$([ -z "$OUT" ]; echo $?)"
+
+# The boot guard counts only modules the root manager will load and start.
+setup guard_states 200
+module tee_off "TEESimulator"
+: > "$M/disable"
+module tee_gone "TEESimulator"
+: > "$M/remove"
+mkdir -p "$R/data/adb/modules/tee_noprop"
+: > "$R/data/adb/modules/tee_noprop/libTEESimulator.so"
+module tee_on "Tricky Store"
+OUT=$(run --conflicts)
+check "guard: only the enabled simulator" "$([ "$OUT" = tee_on ]; echo $?)"
+OUT=$(run --json)
+says "guard: no module.prop is a leftover" '"level":"info","key":"leftover","a":"tee_noprop"'
+# The module itself, under whatever directory name it was installed.
+setup guard_self 200
+module tee_renamed "TEESimulator-RS_MapleSU"
+: > "$M/libTEESimulator.so"
+OUT=$(COMPAT_SELF_ID=tee_renamed run --conflicts)
+check "guard: not a conflict with itself" "$([ -z "$OUT" ]; echo $?)"
+if [ -e "$R/data/adb/tricky_store/compat_report.json" ]; then r=1; else r=0; fi
+check "guard: writes no report" "$r"
+
 setup restarts 200
 module restarter
 printf 'killall keystore2\n' > "$M/service.sh"
@@ -436,7 +510,7 @@ check "--install skips what is loaded right now" "$r"
 
 # Awkward characters in a module id must not break the JSON.
 setup quoted 200
-mkdir -p "$R/data/adb/modules/tricky_store\"bad"
+module 'tricky_store"bad'
 OUT=$(run --json)
 valid_json "quoted id"
 has "quoted id: reported" error conflict
