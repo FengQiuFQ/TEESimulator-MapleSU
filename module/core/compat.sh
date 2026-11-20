@@ -296,13 +296,19 @@ is_simulator() {
               "$1"/libtricky_store.so "$1"/*/libtricky_store.so "$1"/*/*/libtricky_store.so; do
         [ -f "$_f" ] && return 0
     done
-    # An injector, when something the module ships names keystore2 as what it targets.
+    # An injector, when the injector itself or a library/injector it ships names
+    # keystore2 as its target. Metadata, docs and unrelated scripts are excluded:
+    # managers commonly mention keystore2 (or restart it) in module.prop and their
+    # own service scripts while injecting nothing, which must not stop our daemon.
     for _f in "$1"/inject "$1"/*/inject "$1"/*/*/inject \
               "$1"/injector "$1"/*/injector "$1"/*/*/injector; do
         [ -f "$_f" ] || continue
-        # "$1/" so a module installed as a symlink is searched too. One grep per file
-        # instead of "-exec {} +", which not every busybox build has.
-        find "$1/" -type f -exec grep -qF keystore2 {} \; -print 2>/dev/null | grep -q . && return 0
+        grep -qF keystore2 "$_f" 2>/dev/null && return 0
+        # Size-capped and limited to libraries/injector-named files so a boot-time
+        # scan cannot stall on an unrelated large payload. "$1/" follows a module
+        # installed as a symlink.
+        find "$1/" -type f -size -16M \( -name '*.so' -o -name '*inject*' \) \
+             -exec grep -qF keystore2 {} \; -print 2>/dev/null | grep -q . && return 0
         break
     done
     case $(printf '%s' "$2" | tr 'A-Z' 'a-z') in

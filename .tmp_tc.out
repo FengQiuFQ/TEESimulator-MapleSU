@@ -1,0 +1,468 @@
++ set -u
++++ dirname tools/test_compat.sh
+++ cd tools/..
+++ pwd
++ ROOT=/d/Maple_Workflow/MapleSU/dist-repo/TEESimulator-MapleSU
+++ mktemp -d
++ WORK=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn
++ trap 'rm -rf "$WORK"' EXIT
++ PASS=0
++ FAIL=0
++ setup clean 200
++ S=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/clean
++ R=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/clean/root
++ mkdir -p C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/clean/bin C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/clean/run C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/clean/root/data/adb/modules C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/clean/root/data/adb/ksu C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/clean/root/data/adb/tricky_store C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/clean/root/vendor C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/clean/root/system C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/clean/root/proc/20
++ cat
++ cat
++ printf '#!/bin/sh\necho Enforcing\n'
++ printf '#!/bin/sh\necho package:/x.apk\n'
++ cat
++ printf '#!/bin/sh\necho "$*" > "$FAKE_RUN/nc.args"\nexit "${FAKE_NC_RC:-1}"\n'
++ cat
++ printf '#!/bin/sh\ncat "$FAKE_RUN/logcat" 2>/dev/null\nexit 0\n'
++ chmod +x C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/clean/bin/getenforce C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/clean/bin/getprop C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/clean/bin/logcat C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/clean/bin/nc C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/clean/bin/pidof C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/clean/bin/pm C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/clean/bin/timeout
++ printf 'ro.product.first_api_level=34\nro.product.vendor.model=OPD2401\n'
++ printf 'ro.build.version.security_patch=2025-10-01\n'
++ echo '<AndroidAttestation><Key algorithm="ecdsa"><CertificateChain><Certificate format="pem">'
++ make_cert 200
++ python3 -I - 200
++ echo '</Certificate></CertificateChain></Key></AndroidAttestation>'
++ echo '7f00-7f01 r-xp 00000000 fd:01 12 /data/adb/modules/tricky_store/libTEESimulator.so'
+++ run --json
+++ PATH='C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/clean/bin:C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\usr/local/bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\usr/bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\bin;C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Users\Maple\AppData\Local\Microsoft\WindowsApps;C:\Program Files\Git\cmd;C:\Program Files\GitHub CLI\;C:\Program Files\Go\bin;C:\Program Files\Eclipse Adoptium\jdk-17.0.10.7-hotspot\bin;C:\Python314;C:\Python314\Scripts;C:\msys64\mingw64\bin;D:\platform-tools;C:\Program Files\MySQL\MySQL Server 8.0\bin;C:\Program Files\NVIDIA Corporation\NVIDIA App\NvDLISR;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\dotnet\;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\PowerShell\7\;C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Users\Maple\AppData\Local\Microsoft\WindowsApps;C:\Program Files\Git\cmd;C:\Program Files\GitHub CLI;C:\Program Files\Go\bin;C:\Program Files\Eclipse Adoptium\jdk-17.0.10.7-hotspot\bin;C:\Python314;C:\Python314\Scripts;C:\msys64\mingw64\bin;D:\platform-tools;C:\Program Files\MySQL\MySQL Server 8.0\bin;C:\Program Files\NVIDIA Corporation\NVIDIA App\NvDLISR;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\dotnet;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\PowerShell\7;C:\Users\Maple\AppData\Local\Programs\Python\Python312\Scripts;C:\Users\Maple\AppData\Local\Programs\Python\Python312;C:\Users\Maple\.local\bin;C:\Users\Maple\AppData\Local\Programs\Microsoft VS Code\bin;C:\Users\Maple\AppData\Loca' FAKE_RUN=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/clean/run COMPAT_FS_ROOT=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/clean/root
+++ sh /d/Maple_Workflow/MapleSU/dist-repo/TEESimulator-MapleSU/module/core/compat.sh --json
++ OUT='{"ok":true,"time":1795169289,"counts":{"ok":8,"info":4,"warn":1,"error":0},"items":[{"level":"ok","key":"android_ok","a":"36","b":"","c":""},{"level":"ok","key":"arch_ok","a":"arm64-v8a","b":"","c":""},{"level":"info","key":"root","a":"KernelSU","b":"","c":""},{"level":"ok","key":"selinux_ok","a":"","b":"","c":""},{"level":"ok","key":"conflict_none","a":"","b":"","c":""},{"level":"ok","key":"props_clean","a":"","b":"","c":""},{"level":"warn","key":"keybox_unknown","a":"","b":"","c":""},{"level":"info","key":"keybox_no_rsa","a":"","b":"","c":""},{"level":"info","key":"rkp_blocked","a":"remoteprovisioning.googleapis.com","b":"","c":""},{"level":"ok","key":"soter_ok","a":"","b":"","c":""},{"level":"ok","key":"daemon_ok","a":"","b":"","c":""},{"level":"ok","key":"inject_ok","a":"","b":"","c":""},{"level":"info","key":"soter_idle","a":"","b":"","c":""}]}'
++ valid_json clean
++ python3 -I -m json.tool
++ check 'clean (output is not JSON)' 9009
++ '[' 9009 = 0 ']'
++ FAIL=1
++ echo 'FAIL: clean (output is not JSON)'
+FAIL: clean (output is not JSON)
++ echo '  {"ok":true,"time":1795169289,"counts":{"ok":8,"info":4,"warn":1,"error":0},"items":[{"level":"ok","key":"android_ok","a":"36","b":"","c":""},{"level":"ok","key":"arch_ok","a":"arm64-v8a","b":"","c":""},{"level":"info","key":"root","a":"KernelSU","b":"","c":""},{"level":"ok","key":"selinux_ok","a":"","b":"","c":""},{"level":"ok","key":"conflict_none","a":"","b":"","c":""},{"level":"ok","key":"props_clean","a":"","b":"","c":""},{"level":"warn","key":"keybox_unknown","a":"","b":"","c":""},{"level":"info","key":"keybox_no_rsa","a":"","b":"","c":""},{"level":"info","key":"rkp_blocked","a":"remoteprovisioning.googleapis.com","b":"","c":""},{"level":"ok","key":"soter_ok","a":"","b":"","c":""},{"level":"ok","key":"daemon_ok","a":"","b":"","c":""},{"level":"ok","key":"inject_ok","a":"","b":"","c":""},{"level":"info","key":"soter_idle","a":"","b":"","c":""}]}'
+  {"ok":true,"time":1795169289,"counts":{"ok":8,"info":4,"warn":1,"error":0},"items":[{"level":"ok","key":"android_ok","a":"36","b":"","c":""},{"level":"ok","key":"arch_ok","a":"arm64-v8a","b":"","c":""},{"level":"info","key":"root","a":"KernelSU","b":"","c":""},{"level":"ok","key":"selinux_ok","a":"","b":"","c":""},{"level":"ok","key":"conflict_none","a":"","b":"","c":""},{"level":"ok","key":"props_clean","a":"","b":"","c":""},{"level":"warn","key":"keybox_unknown","a":"","b":"","c":""},{"level":"info","key":"keybox_no_rsa","a":"","b":"","c":""},{"level":"info","key":"rkp_blocked","a":"remoteprovisioning.googleapis.com","b":"","c":""},{"level":"ok","key":"soter_ok","a":"","b":"","c":""},{"level":"ok","key":"daemon_ok","a":"","b":"","c":""},{"level":"ok","key":"inject_ok","a":"","b":"","c":""},{"level":"info","key":"soter_idle","a":"","b":"","c":""}]}
++ has 'clean: android' ok android_ok
++ grep -q '"level":"ok","key":"android_ok"'
++ check 'clean: android (wanted ok android_ok)' 0
++ '[' 0 = 0 ']'
++ PASS=1
++ has 'clean: no other simulator' ok conflict_none
++ grep -q '"level":"ok","key":"conflict_none"'
++ check 'clean: no other simulator (wanted ok conflict_none)' 0
++ '[' 0 = 0 ']'
++ PASS=2
++ has 'clean: no props touched' ok props_clean
++ grep -q '"level":"ok","key":"props_clean"'
++ check 'clean: no props touched (wanted ok props_clean)' 0
++ '[' 0 = 0 ']'
++ PASS=3
++ has 'clean: keybox valid' ok keybox_ok
++ grep -q '"level":"ok","key":"keybox_ok"'
++ check 'clean: keybox valid (wanted ok keybox_ok)' 1
++ '[' 1 = 0 ']'
++ FAIL=2
++ echo 'FAIL: clean: keybox valid (wanted ok keybox_ok)'
+FAIL: clean: keybox valid (wanted ok keybox_ok)
++ echo '  {"ok":true,"time":1795169289,"counts":{"ok":8,"info":4,"warn":1,"error":0},"items":[{"level":"ok","key":"android_ok","a":"36","b":"","c":""},{"level":"ok","key":"arch_ok","a":"arm64-v8a","b":"","c":""},{"level":"info","key":"root","a":"KernelSU","b":"","c":""},{"level":"ok","key":"selinux_ok","a":"","b":"","c":""},{"level":"ok","key":"conflict_none","a":"","b":"","c":""},{"level":"ok","key":"props_clean","a":"","b":"","c":""},{"level":"warn","key":"keybox_unknown","a":"","b":"","c":""},{"level":"info","key":"keybox_no_rsa","a":"","b":"","c":""},{"level":"info","key":"rkp_blocked","a":"remoteprovisioning.googleapis.com","b":"","c":""},{"level":"ok","key":"soter_ok","a":"","b":"","c":""},{"level":"ok","key":"daemon_ok","a":"","b":"","c":""},{"level":"ok","key":"inject_ok","a":"","b":"","c":""},{"level":"info","key":"soter_idle","a":"","b":"","c":""}]}'
+  {"ok":true,"time":1795169289,"counts":{"ok":8,"info":4,"warn":1,"error":0},"items":[{"level":"ok","key":"android_ok","a":"36","b":"","c":""},{"level":"ok","key":"arch_ok","a":"arm64-v8a","b":"","c":""},{"level":"info","key":"root","a":"KernelSU","b":"","c":""},{"level":"ok","key":"selinux_ok","a":"","b":"","c":""},{"level":"ok","key":"conflict_none","a":"","b":"","c":""},{"level":"ok","key":"props_clean","a":"","b":"","c":""},{"level":"warn","key":"keybox_unknown","a":"","b":"","c":""},{"level":"info","key":"keybox_no_rsa","a":"","b":"","c":""},{"level":"info","key":"rkp_blocked","a":"remoteprovisioning.googleapis.com","b":"","c":""},{"level":"ok","key":"soter_ok","a":"","b":"","c":""},{"level":"ok","key":"daemon_ok","a":"","b":"","c":""},{"level":"ok","key":"inject_ok","a":"","b":"","c":""},{"level":"info","key":"soter_idle","a":"","b":"","c":""}]}
++ has 'clean: EC-only keybox noted' info keybox_no_rsa
++ grep -q '"level":"info","key":"keybox_no_rsa"'
++ check 'clean: EC-only keybox noted (wanted info keybox_no_rsa)' 0
++ '[' 0 = 0 ']'
++ PASS=4
++ has 'clean: daemon up' ok daemon_ok
++ grep -q '"level":"ok","key":"daemon_ok"'
++ check 'clean: daemon up (wanted ok daemon_ok)' 0
++ '[' 0 = 0 ']'
++ PASS=5
++ has 'clean: injected' ok inject_ok
++ grep -q '"level":"ok","key":"inject_ok"'
++ check 'clean: injected (wanted ok inject_ok)' 0
++ '[' 0 = 0 ']'
++ PASS=6
++ for k in first_api pki_prop overlay shares_config touches_keystore injected_other props_changed rkp_stall
++ hasnt clean first_api
++ grep -q '"key":"first_api"'
++ r=0
++ check 'clean (did not want first_api)' 0
++ '[' 0 = 0 ']'
++ PASS=7
++ for k in first_api pki_prop overlay shares_config touches_keystore injected_other props_changed rkp_stall
++ hasnt clean pki_prop
++ grep -q '"key":"pki_prop"'
++ r=0
++ check 'clean (did not want pki_prop)' 0
++ '[' 0 = 0 ']'
++ PASS=8
++ for k in first_api pki_prop overlay shares_config touches_keystore injected_other props_changed rkp_stall
++ hasnt clean overlay
++ grep -q '"key":"overlay"'
++ r=0
++ check 'clean (did not want overlay)' 0
++ '[' 0 = 0 ']'
++ PASS=9
++ for k in first_api pki_prop overlay shares_config touches_keystore injected_other props_changed rkp_stall
++ hasnt clean shares_config
++ grep -q '"key":"shares_config"'
++ r=0
++ check 'clean (did not want shares_config)' 0
++ '[' 0 = 0 ']'
++ PASS=10
++ for k in first_api pki_prop overlay shares_config touches_keystore injected_other props_changed rkp_stall
++ hasnt clean touches_keystore
++ grep -q '"key":"touches_keystore"'
++ r=0
++ check 'clean (did not want touches_keystore)' 0
++ '[' 0 = 0 ']'
++ PASS=11
++ for k in first_api pki_prop overlay shares_config touches_keystore injected_other props_changed rkp_stall
++ hasnt clean injected_other
++ grep -q '"key":"injected_other"'
++ r=0
++ check 'clean (did not want injected_other)' 0
++ '[' 0 = 0 ']'
++ PASS=12
++ for k in first_api pki_prop overlay shares_config touches_keystore injected_other props_changed rkp_stall
++ hasnt clean props_changed
++ grep -q '"key":"props_changed"'
++ r=0
++ check 'clean (did not want props_changed)' 0
++ '[' 0 = 0 ']'
++ PASS=13
++ for k in first_api pki_prop overlay shares_config touches_keystore injected_other props_changed rkp_stall
++ hasnt clean rkp_stall
++ grep -q '"key":"rkp_stall"'
++ r=0
++ check 'clean (did not want rkp_stall)' 0
++ '[' 0 = 0 ']'
++ PASS=14
++ setup spoofed 200
++ S=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed
++ R=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/root
++ mkdir -p C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/bin C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/run C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/root/data/adb/modules C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/root/data/adb/ksu C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/root/data/adb/tricky_store C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/root/vendor C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/root/system C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/root/proc/20
++ cat
++ cat
++ printf '#!/bin/sh\necho Enforcing\n'
++ printf '#!/bin/sh\necho package:/x.apk\n'
++ cat
++ printf '#!/bin/sh\necho "$*" > "$FAKE_RUN/nc.args"\nexit "${FAKE_NC_RC:-1}"\n'
++ cat
++ printf '#!/bin/sh\ncat "$FAKE_RUN/logcat" 2>/dev/null\nexit 0\n'
++ chmod +x C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/bin/getenforce C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/bin/getprop C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/bin/logcat C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/bin/nc C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/bin/pidof C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/bin/pm C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/bin/timeout
++ printf 'ro.product.first_api_level=34\nro.product.vendor.model=OPD2401\n'
++ printf 'ro.build.version.security_patch=2025-10-01\n'
++ echo '<AndroidAttestation><Key algorithm="ecdsa"><CertificateChain><Certificate format="pem">'
++ make_cert 200
++ python3 -I - 200
++ echo '</Certificate></CertificateChain></Key></AndroidAttestation>'
++ echo '7f00-7f01 r-xp 00000000 fd:01 12 /data/adb/modules/tricky_store/libTEESimulator.so'
++ module random_spoof 'Hello World'
++ M=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/root/data/adb/modules/random_spoof
++ mkdir -p C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/root/data/adb/modules/random_spoof
++ printf 'id=%s\nname=%s\n' random_spoof 'Hello World'
++ cat
++ SPOOF=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/root/data/adb/modules/random_spoof/system.prop
++ module teesimulator-rs TEESimulator-RS_MapleSU
++ M=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/root/data/adb/modules/teesimulator-rs
++ mkdir -p C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/root/data/adb/modules/teesimulator-rs
++ printf 'id=%s\nname=%s\n' teesimulator-rs TEESimulator-RS_MapleSU
++ touch C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/root/data/adb/modules/teesimulator-rs/disable
+++ run --json
+++ PATH='C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/bin:C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\usr/local/bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\usr/bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\bin;C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Users\Maple\AppData\Local\Microsoft\WindowsApps;C:\Program Files\Git\cmd;C:\Program Files\GitHub CLI\;C:\Program Files\Go\bin;C:\Program Files\Eclipse Adoptium\jdk-17.0.10.7-hotspot\bin;C:\Python314;C:\Python314\Scripts;C:\msys64\mingw64\bin;D:\platform-tools;C:\Program Files\MySQL\MySQL Server 8.0\bin;C:\Program Files\NVIDIA Corporation\NVIDIA App\NvDLISR;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\dotnet\;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\PowerShell\7\;C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Users\Maple\AppData\Local\Microsoft\WindowsApps;C:\Program Files\Git\cmd;C:\Program Files\GitHub CLI;C:\Program Files\Go\bin;C:\Program Files\Eclipse Adoptium\jdk-17.0.10.7-hotspot\bin;C:\Python314;C:\Python314\Scripts;C:\msys64\mingw64\bin;D:\platform-tools;C:\Program Files\MySQL\MySQL Server 8.0\bin;C:\Program Files\NVIDIA Corporation\NVIDIA App\NvDLISR;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\dotnet;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\PowerShell\7;C:\Users\Maple\AppData\Local\Programs\Python\Python312\Scripts;C:\Users\Maple\AppData\Local\Programs\Python\Python312;C:\Users\Maple\.local\bin;C:\Users\Maple\AppData\Local\Programs\Microsoft VS Code\bin;C:\Users\Maple\AppData\Loca' FAKE_RUN=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/run COMPAT_FS_ROOT=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/root
+++ sh /d/Maple_Workflow/MapleSU/dist-repo/TEESimulator-MapleSU/module/core/compat.sh --json
++ OUT='{"ok":true,"time":1795169299,"counts":{"ok":6,"info":9,"warn":2,"error":0},"items":[{"level":"ok","key":"android_ok","a":"36","b":"","c":""},{"level":"ok","key":"arch_ok","a":"arm64-v8a","b":"","c":""},{"level":"info","key":"root","a":"KernelSU","b":"","c":""},{"level":"ok","key":"selinux_ok","a":"","b":"","c":""},{"level":"info","key":"props_changed","a":"random_spoof","b":"3","c":"2"},{"level":"info","key":"leftover","a":"teesimulator-rs","b":"","c":""},{"level":"warn","key":"first_api","a":"random_spoof","b":"36","c":"34"},{"level":"info","key":"pki_prop","a":"random_spoof","b":"11","c":""},{"level":"info","key":"vbmeta_prop","a":"random_spoof","b":"ro.boot.vbmeta.digest","c":""},{"level":"info","key":"patch_prop","a":"random_spoof","b":"ro.build.version.security_patch","c":"2026-07-01"},{"level":"warn","key":"keybox_unknown","a":"","b":"","c":""},{"level":"info","key":"keybox_no_rsa","a":"","b":"","c":""},{"level":"info","key":"rkp_blocked","a":"remoteprovisioning.googleapis.com","b":"","c":""},{"level":"ok","key":"soter_ok","a":"","b":"","c":""},{"level":"ok","key":"daemon_ok","a":"","b":"","c":""},{"level":"ok","key":"inject_ok","a":"","b":"","c":""},{"level":"info","key":"soter_idle","a":"","b":"","c":""}]}'
++ says 'spoofed: first_api names module and both values' '"level":"warn","key":"first_api","a":"random_spoof","b":"36","c":"34"'
++ grep -qF -- '"level":"warn","key":"first_api","a":"random_spoof","b":"36","c":"34"'
++ check 'spoofed: first_api names module and both values (wanted: "level":"warn","key":"first_api","a":"random_spoof","b":"36","c":"34")' 0
++ '[' 0 = 0 ']'
++ PASS=15
++ says 'spoofed: pki' '"level":"info","key":"pki_prop","a":"random_spoof","b":"11","c":""'
++ grep -qF -- '"level":"info","key":"pki_prop","a":"random_spoof","b":"11","c":""'
++ check 'spoofed: pki (wanted: "level":"info","key":"pki_prop","a":"random_spoof","b":"11","c":"")' 0
++ '[' 0 = 0 ']'
++ PASS=16
++ says 'spoofed: vbmeta' '"level":"info","key":"vbmeta_prop","a":"random_spoof","b":"ro.boot.vbmeta.digest"'
++ grep -qF -- '"level":"info","key":"vbmeta_prop","a":"random_spoof","b":"ro.boot.vbmeta.digest"'
++ check 'spoofed: vbmeta (wanted: "level":"info","key":"vbmeta_prop","a":"random_spoof","b":"ro.boot.vbmeta.digest")' 0
++ '[' 0 = 0 ']'
++ PASS=17
++ says 'spoofed: patch' '"level":"info","key":"patch_prop","a":"random_spoof","b":"ro.build.version.security_patch","c":"2026-07-01"'
++ grep -qF -- '"level":"info","key":"patch_prop","a":"random_spoof","b":"ro.build.version.security_patch","c":"2026-07-01"'
++ check 'spoofed: patch (wanted: "level":"info","key":"patch_prop","a":"random_spoof","b":"ro.build.version.security_patch","c":"2026-07-01")' 0
++ '[' 0 = 0 ']'
++ PASS=18
++ says 'spoofed: counts changed and added' '"key":"props_changed","a":"random_spoof","b":"3","c":"2"'
++ grep -qF -- '"key":"props_changed","a":"random_spoof","b":"3","c":"2"'
++ check 'spoofed: counts changed and added (wanted: "key":"props_changed","a":"random_spoof","b":"3","c":"2")' 0
++ '[' 0 = 0 ']'
++ PASS=19
++ has 'spoofed: old module is a leftover' info leftover
++ grep -q '"level":"info","key":"leftover"'
++ check 'spoofed: old module is a leftover (wanted info leftover)' 0
++ '[' 0 = 0 ']'
++ PASS=20
++ hasnt 'spoofed: leftover is not a conflict' conflict
++ grep -q '"key":"conflict"'
++ r=0
++ check 'spoofed: leftover is not a conflict (did not want conflict)' 0
++ '[' 0 = 0 ']'
++ PASS=21
++ hasnt spoofed props_clean
++ grep -q '"key":"props_clean"'
++ r=0
++ check 'spoofed (did not want props_clean)' 0
++ '[' 0 = 0 ']'
++ PASS=22
++ sed -i.bak s/first_api_level=36/first_api_level=34/ C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/root/data/adb/modules/random_spoof/system.prop
+++ run --json
+++ PATH='C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/bin:C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\usr/local/bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\usr/bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\bin;C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Users\Maple\AppData\Local\Microsoft\WindowsApps;C:\Program Files\Git\cmd;C:\Program Files\GitHub CLI\;C:\Program Files\Go\bin;C:\Program Files\Eclipse Adoptium\jdk-17.0.10.7-hotspot\bin;C:\Python314;C:\Python314\Scripts;C:\msys64\mingw64\bin;D:\platform-tools;C:\Program Files\MySQL\MySQL Server 8.0\bin;C:\Program Files\NVIDIA Corporation\NVIDIA App\NvDLISR;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\dotnet\;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\PowerShell\7\;C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Users\Maple\AppData\Local\Microsoft\WindowsApps;C:\Program Files\Git\cmd;C:\Program Files\GitHub CLI;C:\Program Files\Go\bin;C:\Program Files\Eclipse Adoptium\jdk-17.0.10.7-hotspot\bin;C:\Python314;C:\Python314\Scripts;C:\msys64\mingw64\bin;D:\platform-tools;C:\Program Files\MySQL\MySQL Server 8.0\bin;C:\Program Files\NVIDIA Corporation\NVIDIA App\NvDLISR;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\dotnet;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\PowerShell\7;C:\Users\Maple\AppData\Local\Programs\Python\Python312\Scripts;C:\Users\Maple\AppData\Local\Programs\Python\Python312;C:\Users\Maple\.local\bin;C:\Users\Maple\AppData\Local\Programs\Microsoft VS Code\bin;C:\Users\Maple\AppData\Loca' FAKE_RUN=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/run COMPAT_FS_ROOT=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/root
+++ sh /d/Maple_Workflow/MapleSU/dist-repo/TEESimulator-MapleSU/module/core/compat.sh --json
++ OUT='{"ok":true,"time":1795169308,"counts":{"ok":6,"info":9,"warn":1,"error":0},"items":[{"level":"ok","key":"android_ok","a":"36","b":"","c":""},{"level":"ok","key":"arch_ok","a":"arm64-v8a","b":"","c":""},{"level":"info","key":"root","a":"KernelSU","b":"","c":""},{"level":"ok","key":"selinux_ok","a":"","b":"","c":""},{"level":"info","key":"props_changed","a":"random_spoof","b":"2","c":"2"},{"level":"info","key":"leftover","a":"teesimulator-rs","b":"","c":""},{"level":"info","key":"pki_prop","a":"random_spoof","b":"11","c":""},{"level":"info","key":"vbmeta_prop","a":"random_spoof","b":"ro.boot.vbmeta.digest","c":""},{"level":"info","key":"patch_prop","a":"random_spoof","b":"ro.build.version.security_patch","c":"2026-07-01"},{"level":"warn","key":"keybox_unknown","a":"","b":"","c":""},{"level":"info","key":"keybox_no_rsa","a":"","b":"","c":""},{"level":"info","key":"rkp_blocked","a":"remoteprovisioning.googleapis.com","b":"","c":""},{"level":"ok","key":"soter_ok","a":"","b":"","c":""},{"level":"ok","key":"daemon_ok","a":"","b":"","c":""},{"level":"ok","key":"inject_ok","a":"","b":"","c":""},{"level":"info","key":"soter_idle","a":"","b":"","c":""}]}'
++ hasnt 'first_api back at the device'\''s value' first_api
++ grep -q '"key":"first_api"'
++ r=0
++ check 'first_api back at the device'\''s value (did not want first_api)' 0
++ '[' 0 = 0 ']'
++ PASS=23
++ sed -i.bak s/first_api_level=34/first_api_level=33/ C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/root/data/adb/modules/random_spoof/system.prop
+++ run --json
+++ PATH='C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/bin:C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\usr/local/bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\usr/bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\bin;C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Users\Maple\AppData\Local\Microsoft\WindowsApps;C:\Program Files\Git\cmd;C:\Program Files\GitHub CLI\;C:\Program Files\Go\bin;C:\Program Files\Eclipse Adoptium\jdk-17.0.10.7-hotspot\bin;C:\Python314;C:\Python314\Scripts;C:\msys64\mingw64\bin;D:\platform-tools;C:\Program Files\MySQL\MySQL Server 8.0\bin;C:\Program Files\NVIDIA Corporation\NVIDIA App\NvDLISR;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\dotnet\;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\PowerShell\7\;C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Users\Maple\AppData\Local\Microsoft\WindowsApps;C:\Program Files\Git\cmd;C:\Program Files\GitHub CLI;C:\Program Files\Go\bin;C:\Program Files\Eclipse Adoptium\jdk-17.0.10.7-hotspot\bin;C:\Python314;C:\Python314\Scripts;C:\msys64\mingw64\bin;D:\platform-tools;C:\Program Files\MySQL\MySQL Server 8.0\bin;C:\Program Files\NVIDIA Corporation\NVIDIA App\NvDLISR;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\dotnet;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\PowerShell\7;C:\Users\Maple\AppData\Local\Programs\Python\Python312\Scripts;C:\Users\Maple\AppData\Local\Programs\Python\Python312;C:\Users\Maple\.local\bin;C:\Users\Maple\AppData\Local\Programs\Microsoft VS Code\bin;C:\Users\Maple\AppData\Loca' FAKE_RUN=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/run COMPAT_FS_ROOT=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/root
+++ sh /d/Maple_Workflow/MapleSU/dist-repo/TEESimulator-MapleSU/module/core/compat.sh --json
++ OUT='{"ok":true,"time":1795169316,"counts":{"ok":6,"info":9,"warn":1,"error":0},"items":[{"level":"ok","key":"android_ok","a":"36","b":"","c":""},{"level":"ok","key":"arch_ok","a":"arm64-v8a","b":"","c":""},{"level":"info","key":"root","a":"KernelSU","b":"","c":""},{"level":"ok","key":"selinux_ok","a":"","b":"","c":""},{"level":"info","key":"props_changed","a":"random_spoof","b":"3","c":"2"},{"level":"info","key":"leftover","a":"teesimulator-rs","b":"","c":""},{"level":"info","key":"pki_prop","a":"random_spoof","b":"11","c":""},{"level":"info","key":"vbmeta_prop","a":"random_spoof","b":"ro.boot.vbmeta.digest","c":""},{"level":"info","key":"patch_prop","a":"random_spoof","b":"ro.build.version.security_patch","c":"2026-07-01"},{"level":"warn","key":"keybox_unknown","a":"","b":"","c":""},{"level":"info","key":"keybox_no_rsa","a":"","b":"","c":""},{"level":"info","key":"rkp_blocked","a":"remoteprovisioning.googleapis.com","b":"","c":""},{"level":"ok","key":"soter_ok","a":"","b":"","c":""},{"level":"ok","key":"daemon_ok","a":"","b":"","c":""},{"level":"ok","key":"inject_ok","a":"","b":"","c":""},{"level":"info","key":"soter_idle","a":"","b":"","c":""}]}'
++ hasnt 'first_api below the device'\''s value' first_api
++ grep -q '"key":"first_api"'
++ r=0
++ check 'first_api below the device'\''s value (did not want first_api)' 0
++ '[' 0 = 0 ']'
++ PASS=24
+++ dirname C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/root/data/adb/modules/random_spoof/system.prop
++ touch C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/root/data/adb/modules/random_spoof/disable
+++ run --json
+++ PATH='C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/bin:C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\usr/local/bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\usr/bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\bin;C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Users\Maple\AppData\Local\Microsoft\WindowsApps;C:\Program Files\Git\cmd;C:\Program Files\GitHub CLI\;C:\Program Files\Go\bin;C:\Program Files\Eclipse Adoptium\jdk-17.0.10.7-hotspot\bin;C:\Python314;C:\Python314\Scripts;C:\msys64\mingw64\bin;D:\platform-tools;C:\Program Files\MySQL\MySQL Server 8.0\bin;C:\Program Files\NVIDIA Corporation\NVIDIA App\NvDLISR;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\dotnet\;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\PowerShell\7\;C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Users\Maple\AppData\Local\Microsoft\WindowsApps;C:\Program Files\Git\cmd;C:\Program Files\GitHub CLI;C:\Program Files\Go\bin;C:\Program Files\Eclipse Adoptium\jdk-17.0.10.7-hotspot\bin;C:\Python314;C:\Python314\Scripts;C:\msys64\mingw64\bin;D:\platform-tools;C:\Program Files\MySQL\MySQL Server 8.0\bin;C:\Program Files\NVIDIA Corporation\NVIDIA App\NvDLISR;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\dotnet;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\PowerShell\7;C:\Users\Maple\AppData\Local\Programs\Python\Python312\Scripts;C:\Users\Maple\AppData\Local\Programs\Python\Python312;C:\Users\Maple\.local\bin;C:\Users\Maple\AppData\Local\Programs\Microsoft VS Code\bin;C:\Users\Maple\AppData\Loca' FAKE_RUN=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/run COMPAT_FS_ROOT=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/spoofed/root
+++ sh /d/Maple_Workflow/MapleSU/dist-repo/TEESimulator-MapleSU/module/core/compat.sh --json
++ OUT='{"ok":true,"time":1795169324,"counts":{"ok":7,"info":5,"warn":1,"error":0},"items":[{"level":"ok","key":"android_ok","a":"36","b":"","c":""},{"level":"ok","key":"arch_ok","a":"arm64-v8a","b":"","c":""},{"level":"info","key":"root","a":"KernelSU","b":"","c":""},{"level":"ok","key":"selinux_ok","a":"","b":"","c":""},{"level":"info","key":"leftover","a":"teesimulator-rs","b":"","c":""},{"level":"ok","key":"props_clean","a":"","b":"","c":""},{"level":"warn","key":"keybox_unknown","a":"","b":"","c":""},{"level":"info","key":"keybox_no_rsa","a":"","b":"","c":""},{"level":"info","key":"rkp_blocked","a":"remoteprovisioning.googleapis.com","b":"","c":""},{"level":"ok","key":"soter_ok","a":"","b":"","c":""},{"level":"ok","key":"daemon_ok","a":"","b":"","c":""},{"level":"ok","key":"inject_ok","a":"","b":"","c":""},{"level":"info","key":"soter_idle","a":"","b":"","c":""}]}'
++ hasnt 'disabled module: pki not blamed' pki_prop
++ grep -q '"key":"pki_prop"'
++ r=0
++ check 'disabled module: pki not blamed (did not want pki_prop)' 0
++ '[' 0 = 0 ']'
++ PASS=25
++ hasnt 'disabled module: not counted' props_changed
++ grep -q '"key":"props_changed"'
++ r=0
++ check 'disabled module: not counted (did not want props_changed)' 0
++ '[' 0 = 0 ']'
++ PASS=26
++ setup crlf 200
++ S=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/crlf
++ R=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/crlf/root
++ mkdir -p C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/crlf/bin C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/crlf/run C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/crlf/root/data/adb/modules C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/crlf/root/data/adb/ksu C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/crlf/root/data/adb/tricky_store C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/crlf/root/vendor C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/crlf/root/system C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/crlf/root/proc/20
++ cat
++ cat
++ printf '#!/bin/sh\necho Enforcing\n'
++ printf '#!/bin/sh\necho package:/x.apk\n'
++ cat
++ printf '#!/bin/sh\necho "$*" > "$FAKE_RUN/nc.args"\nexit "${FAKE_NC_RC:-1}"\n'
++ cat
++ printf '#!/bin/sh\ncat "$FAKE_RUN/logcat" 2>/dev/null\nexit 0\n'
++ chmod +x C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/crlf/bin/getenforce C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/crlf/bin/getprop C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/crlf/bin/logcat C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/crlf/bin/nc C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/crlf/bin/pidof C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/crlf/bin/pm C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/crlf/bin/timeout
++ printf 'ro.product.first_api_level=34\nro.product.vendor.model=OPD2401\n'
++ printf 'ro.build.version.security_patch=2025-10-01\n'
++ echo '<AndroidAttestation><Key algorithm="ecdsa"><CertificateChain><Certificate format="pem">'
++ make_cert 200
++ python3 -I - 200
++ echo '</Certificate></CertificateChain></Key></AndroidAttestation>'
++ echo '7f00-7f01 r-xp 00000000 fd:01 12 /data/adb/modules/tricky_store/libTEESimulator.so'
++ module some_mod
++ M=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/crlf/root/data/adb/modules/some_mod
++ mkdir -p C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/crlf/root/data/adb/modules/some_mod
++ printf 'id=%s\nname=%s\n' some_mod some_mod
++ printf 'ro.product.first_api_level=36\r\n'
+++ run --json
+++ PATH='C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/crlf/bin:C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\usr/local/bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\usr/bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\bin;C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Users\Maple\AppData\Local\Microsoft\WindowsApps;C:\Program Files\Git\cmd;C:\Program Files\GitHub CLI\;C:\Program Files\Go\bin;C:\Program Files\Eclipse Adoptium\jdk-17.0.10.7-hotspot\bin;C:\Python314;C:\Python314\Scripts;C:\msys64\mingw64\bin;D:\platform-tools;C:\Program Files\MySQL\MySQL Server 8.0\bin;C:\Program Files\NVIDIA Corporation\NVIDIA App\NvDLISR;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\dotnet\;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\PowerShell\7\;C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Users\Maple\AppData\Local\Microsoft\WindowsApps;C:\Program Files\Git\cmd;C:\Program Files\GitHub CLI;C:\Program Files\Go\bin;C:\Program Files\Eclipse Adoptium\jdk-17.0.10.7-hotspot\bin;C:\Python314;C:\Python314\Scripts;C:\msys64\mingw64\bin;D:\platform-tools;C:\Program Files\MySQL\MySQL Server 8.0\bin;C:\Program Files\NVIDIA Corporation\NVIDIA App\NvDLISR;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\dotnet;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\PowerShell\7;C:\Users\Maple\AppData\Local\Programs\Python\Python312\Scripts;C:\Users\Maple\AppData\Local\Programs\Python\Python312;C:\Users\Maple\.local\bin;C:\Users\Maple\AppData\Local\Programs\Microsoft VS Code\bin;C:\Users\Maple\AppData\Loca' FAKE_RUN=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/crlf/run COMPAT_FS_ROOT=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/crlf/root
+++ sh /d/Maple_Workflow/MapleSU/dist-repo/TEESimulator-MapleSU/module/core/compat.sh --json
++ OUT='{"ok":true,"time":1795169333,"counts":{"ok":7,"info":5,"warn":2,"error":0},"items":[{"level":"ok","key":"android_ok","a":"36","b":"","c":""},{"level":"ok","key":"arch_ok","a":"arm64-v8a","b":"","c":""},{"level":"info","key":"root","a":"KernelSU","b":"","c":""},{"level":"ok","key":"selinux_ok","a":"","b":"","c":""},{"level":"info","key":"props_changed","a":"some_mod","b":"1","c":"0"},{"level":"ok","key":"conflict_none","a":"","b":"","c":""},{"level":"warn","key":"first_api","a":"some_mod","b":"36","c":"34"},{"level":"warn","key":"keybox_unknown","a":"","b":"","c":""},{"level":"info","key":"keybox_no_rsa","a":"","b":"","c":""},{"level":"info","key":"rkp_blocked","a":"remoteprovisioning.googleapis.com","b":"","c":""},{"level":"ok","key":"soter_ok","a":"","b":"","c":""},{"level":"ok","key":"daemon_ok","a":"","b":"","c":""},{"level":"ok","key":"inject_ok","a":"","b":"","c":""},{"level":"info","key":"soter_idle","a":"","b":"","c":""}]}'
++ has 'crlf: first_api still found' warn first_api
++ grep -q '"level":"warn","key":"first_api"'
++ check 'crlf: first_api still found (wanted warn first_api)' 0
++ '[' 0 = 0 ']'
++ PASS=27
++ hasnt 'crlf: same line is not also added' pki_prop
++ grep -q '"key":"pki_prop"'
++ r=0
++ check 'crlf: same line is not also added (did not want pki_prop)' 0
++ '[' 0 = 0 ']'
++ PASS=28
++ setup native_api 200
++ S=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api
++ R=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/root
++ mkdir -p C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/bin C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/run C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/root/data/adb/modules C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/root/data/adb/ksu C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/root/data/adb/tricky_store C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/root/vendor C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/root/system C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/root/proc/20
++ cat
++ cat
++ printf '#!/bin/sh\necho Enforcing\n'
++ printf '#!/bin/sh\necho package:/x.apk\n'
++ cat
++ printf '#!/bin/sh\necho "$*" > "$FAKE_RUN/nc.args"\nexit "${FAKE_NC_RC:-1}"\n'
++ cat
++ printf '#!/bin/sh\ncat "$FAKE_RUN/logcat" 2>/dev/null\nexit 0\n'
++ chmod +x C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/bin/getenforce C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/bin/getprop C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/bin/logcat C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/bin/nc C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/bin/pidof C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/bin/pm C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/bin/timeout
++ printf 'ro.product.first_api_level=34\nro.product.vendor.model=OPD2401\n'
++ printf 'ro.build.version.security_patch=2025-10-01\n'
++ echo '<AndroidAttestation><Key algorithm="ecdsa"><CertificateChain><Certificate format="pem">'
++ make_cert 200
++ python3 -I - 200
++ echo '</Certificate></CertificateChain></Key></AndroidAttestation>'
++ echo '7f00-7f01 r-xp 00000000 fd:01 12 /data/adb/modules/tricky_store/libTEESimulator.so'
++ :
++ native vendor/build.prop ro.product.first_api_level=36
+++ dirname C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/root/vendor/build.prop
++ mkdir -p C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/root/vendor
++ printf '%s\n' ro.product.first_api_level=36
++ module some_mod
++ M=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/root/data/adb/modules/some_mod
++ mkdir -p C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/root/data/adb/modules/some_mod
++ printf 'id=%s\nname=%s\n' some_mod some_mod
++ printf 'ro.product.first_api_level=36\n'
++ live ro.product.first_api_level 36
++ printf '%s=%s\n' ro.product.first_api_level 36
+++ run --json
+++ PATH='C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/bin:C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\usr/local/bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\usr/bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\bin;C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Users\Maple\AppData\Local\Microsoft\WindowsApps;C:\Program Files\Git\cmd;C:\Program Files\GitHub CLI\;C:\Program Files\Go\bin;C:\Program Files\Eclipse Adoptium\jdk-17.0.10.7-hotspot\bin;C:\Python314;C:\Python314\Scripts;C:\msys64\mingw64\bin;D:\platform-tools;C:\Program Files\MySQL\MySQL Server 8.0\bin;C:\Program Files\NVIDIA Corporation\NVIDIA App\NvDLISR;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\dotnet\;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\PowerShell\7\;C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Users\Maple\AppData\Local\Microsoft\WindowsApps;C:\Program Files\Git\cmd;C:\Program Files\GitHub CLI;C:\Program Files\Go\bin;C:\Program Files\Eclipse Adoptium\jdk-17.0.10.7-hotspot\bin;C:\Python314;C:\Python314\Scripts;C:\msys64\mingw64\bin;D:\platform-tools;C:\Program Files\MySQL\MySQL Server 8.0\bin;C:\Program Files\NVIDIA Corporation\NVIDIA App\NvDLISR;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\dotnet;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\PowerShell\7;C:\Users\Maple\AppData\Local\Programs\Python\Python312\Scripts;C:\Users\Maple\AppData\Local\Programs\Python\Python312;C:\Users\Maple\.local\bin;C:\Users\Maple\AppData\Local\Programs\Microsoft VS Code\bin;C:\Users\Maple\AppData\Loca' FAKE_RUN=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/run COMPAT_FS_ROOT=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api/root
+++ sh /d/Maple_Workflow/MapleSU/dist-repo/TEESimulator-MapleSU/module/core/compat.sh --json
++ OUT='{"ok":true,"time":1795169344,"counts":{"ok":8,"info":4,"warn":1,"error":0},"items":[{"level":"ok","key":"android_ok","a":"36","b":"","c":""},{"level":"ok","key":"arch_ok","a":"arm64-v8a","b":"","c":""},{"level":"info","key":"root","a":"KernelSU","b":"","c":""},{"level":"ok","key":"selinux_ok","a":"","b":"","c":""},{"level":"ok","key":"conflict_none","a":"","b":"","c":""},{"level":"ok","key":"props_clean","a":"","b":"","c":""},{"level":"warn","key":"keybox_unknown","a":"","b":"","c":""},{"level":"info","key":"keybox_no_rsa","a":"","b":"","c":""},{"level":"info","key":"rkp_blocked","a":"remoteprovisioning.googleapis.com","b":"","c":""},{"level":"ok","key":"soter_ok","a":"","b":"","c":""},{"level":"ok","key":"daemon_ok","a":"","b":"","c":""},{"level":"ok","key":"inject_ok","a":"","b":"","c":""},{"level":"info","key":"soter_idle","a":"","b":"","c":""}]}'
++ hasnt 'native 36, module 36' first_api
++ grep -q '"key":"first_api"'
++ r=0
++ check 'native 36, module 36 (did not want first_api)' 0
++ '[' 0 = 0 ']'
++ PASS=29
++ hasnt 'native 36, module 36: nothing changed' props_changed
++ grep -q '"key":"props_changed"'
++ r=0
++ check 'native 36, module 36: nothing changed (did not want props_changed)' 0
++ '[' 0 = 0 ']'
++ PASS=30
++ has 'native 36, module 36: clean' ok props_clean
++ grep -q '"level":"ok","key":"props_clean"'
++ check 'native 36, module 36: clean (wanted ok props_clean)' 0
++ '[' 0 = 0 ']'
++ PASS=31
++ setup native_api2 200
++ S=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api2
++ R=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api2/root
++ mkdir -p C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api2/bin C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api2/run C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api2/root/data/adb/modules C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api2/root/data/adb/ksu C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api2/root/data/adb/tricky_store C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api2/root/vendor C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api2/root/system C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api2/root/proc/20
++ cat
++ cat
++ printf '#!/bin/sh\necho Enforcing\n'
++ printf '#!/bin/sh\necho package:/x.apk\n'
++ cat
++ printf '#!/bin/sh\necho "$*" > "$FAKE_RUN/nc.args"\nexit "${FAKE_NC_RC:-1}"\n'
++ cat
++ printf '#!/bin/sh\ncat "$FAKE_RUN/logcat" 2>/dev/null\nexit 0\n'
++ chmod +x C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api2/bin/getenforce C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api2/bin/getprop C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api2/bin/logcat C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api2/bin/nc C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api2/bin/pidof C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api2/bin/pm C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api2/bin/timeout
++ printf 'ro.product.first_api_level=34\nro.product.vendor.model=OPD2401\n'
++ printf 'ro.build.version.security_patch=2025-10-01\n'
++ echo '<AndroidAttestation><Key algorithm="ecdsa"><CertificateChain><Certificate format="pem">'
++ make_cert 200
++ python3 -I - 200
++ echo '</Certificate></CertificateChain></Key></AndroidAttestation>'
++ echo '7f00-7f01 r-xp 00000000 fd:01 12 /data/adb/modules/tricky_store/libTEESimulator.so'
++ :
++ native vendor/build.prop ro.product.first_api_level=36
+++ dirname C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api2/root/vendor/build.prop
++ mkdir -p C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api2/root/vendor
++ printf '%s\n' ro.product.first_api_level=36
++ live ro.product.first_api_level 36
++ printf '%s=%s\n' ro.product.first_api_level 36
+++ run --json
+++ PATH='C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api2/bin:C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\usr/local/bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\usr/bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\bin;C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Users\Maple\AppData\Local\Microsoft\WindowsApps;C:\Program Files\Git\cmd;C:\Program Files\GitHub CLI\;C:\Program Files\Go\bin;C:\Program Files\Eclipse Adoptium\jdk-17.0.10.7-hotspot\bin;C:\Python314;C:\Python314\Scripts;C:\msys64\mingw64\bin;D:\platform-tools;C:\Program Files\MySQL\MySQL Server 8.0\bin;C:\Program Files\NVIDIA Corporation\NVIDIA App\NvDLISR;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\dotnet\;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\PowerShell\7\;C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Users\Maple\AppData\Local\Microsoft\WindowsApps;C:\Program Files\Git\cmd;C:\Program Files\GitHub CLI;C:\Program Files\Go\bin;C:\Program Files\Eclipse Adoptium\jdk-17.0.10.7-hotspot\bin;C:\Python314;C:\Python314\Scripts;C:\msys64\mingw64\bin;D:\platform-tools;C:\Program Files\MySQL\MySQL Server 8.0\bin;C:\Program Files\NVIDIA Corporation\NVIDIA App\NvDLISR;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\dotnet;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\PowerShell\7;C:\Users\Maple\AppData\Local\Programs\Python\Python312\Scripts;C:\Users\Maple\AppData\Local\Programs\Python\Python312;C:\Users\Maple\.local\bin;C:\Users\Maple\AppData\Local\Programs\Microsoft VS Code\bin;C:\Users\Maple\AppData\Loca' FAKE_RUN=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api2/run COMPAT_FS_ROOT=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_api2/root
+++ sh /d/Maple_Workflow/MapleSU/dist-repo/TEESimulator-MapleSU/module/core/compat.sh --json
++ OUT='{"ok":true,"time":1795169356,"counts":{"ok":8,"info":4,"warn":1,"error":0},"items":[{"level":"ok","key":"android_ok","a":"36","b":"","c":""},{"level":"ok","key":"arch_ok","a":"arm64-v8a","b":"","c":""},{"level":"info","key":"root","a":"KernelSU","b":"","c":""},{"level":"ok","key":"selinux_ok","a":"","b":"","c":""},{"level":"ok","key":"conflict_none","a":"","b":"","c":""},{"level":"ok","key":"props_clean","a":"","b":"","c":""},{"level":"warn","key":"keybox_unknown","a":"","b":"","c":""},{"level":"info","key":"keybox_no_rsa","a":"","b":"","c":""},{"level":"info","key":"rkp_blocked","a":"remoteprovisioning.googleapis.com","b":"","c":""},{"level":"ok","key":"soter_ok","a":"","b":"","c":""},{"level":"ok","key":"daemon_ok","a":"","b":"","c":""},{"level":"ok","key":"inject_ok","a":"","b":"","c":""},{"level":"info","key":"soter_idle","a":"","b":"","c":""}]}'
++ hasnt 'native 36, no module' first_api
++ grep -q '"key":"first_api"'
++ r=0
++ check 'native 36, no module (did not want first_api)' 0
++ '[' 0 = 0 ']'
++ PASS=32
++ for f in my_product/build.prop my_manifest/build.prop odm/build.prop odm/etc/build.prop odm/etc/build_sku1.prop vendor/odm/etc/build.prop vendor/default.prop product/etc/build.prop mi_ext/etc/build.prop
+++ echo $'$f\023'
+++ tr /. __
++ setup native_pki_my_product_build_prop 200
++ S=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop
++ R=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/root
++ mkdir -p C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/bin C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/run C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/root/data/adb/modules C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/root/data/adb/ksu C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/root/data/adb/tricky_store C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/root/vendor C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/root/system C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/root/proc/20
++ cat
++ cat
++ printf '#!/bin/sh\necho Enforcing\n'
++ printf '#!/bin/sh\necho package:/x.apk\n'
++ cat
++ printf '#!/bin/sh\necho "$*" > "$FAKE_RUN/nc.args"\nexit "${FAKE_NC_RC:-1}"\n'
++ cat
++ printf '#!/bin/sh\ncat "$FAKE_RUN/logcat" 2>/dev/null\nexit 0\n'
++ chmod +x C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/bin/getenforce C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/bin/getprop C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/bin/logcat C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/bin/nc C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/bin/pidof C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/bin/pm C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/bin/timeout
++ printf 'ro.product.first_api_level=34\nro.product.vendor.model=OPD2401\n'
++ printf 'ro.build.version.security_patch=2025-10-01\n'
++ echo '<AndroidAttestation><Key algorithm="ecdsa"><CertificateChain><Certificate format="pem">'
++ make_cert 200
++ python3 -I - 200
++ echo '</Certificate></CertificateChain></Key></AndroidAttestation>'
++ echo '7f00-7f01 r-xp 00000000 fd:01 12 /data/adb/modules/tricky_store/libTEESimulator.so'
++ native my_product/build.prop ro.vendor.oplus.provision.pki=11
+++ dirname C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/root/my_product/build.prop
++ mkdir -p C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/root/my_product
++ printf '%s\n' ro.vendor.oplus.provision.pki=11
++ module some_mod
++ M=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/root/data/adb/modules/some_mod
++ mkdir -p C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/root/data/adb/modules/some_mod
++ printf 'id=%s\nname=%s\n' some_mod some_mod
++ printf 'ro.vendor.oplus.provision.pki=11\n'
+++ run --json
+++ PATH='C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/bin:C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\usr/local/bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\usr/bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\bin;C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Users\Maple\AppData\Local\Microsoft\WindowsApps;C:\Program Files\Git\cmd;C:\Program Files\GitHub CLI\;C:\Program Files\Go\bin;C:\Program Files\Eclipse Adoptium\jdk-17.0.10.7-hotspot\bin;C:\Python314;C:\Python314\Scripts;C:\msys64\mingw64\bin;D:\platform-tools;C:\Program Files\MySQL\MySQL Server 8.0\bin;C:\Program Files\NVIDIA Corporation\NVIDIA App\NvDLISR;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\dotnet\;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\PowerShell\7\;C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Users\Maple\AppData\Local\Microsoft\WindowsApps;C:\Program Files\Git\cmd;C:\Program Files\GitHub CLI;C:\Program Files\Go\bin;C:\Program Files\Eclipse Adoptium\jdk-17.0.10.7-hotspot\bin;C:\Python314;C:\Python314\Scripts;C:\msys64\mingw64\bin;D:\platform-tools;C:\Program Files\MySQL\MySQL Server 8.0\bin;C:\Program Files\NVIDIA Corporation\NVIDIA App\NvDLISR;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\dotnet;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\PowerShell\7;C:\Users\Maple\AppData\Local\Programs\Python\Python312\Scripts;C:\Users\Maple\AppData\Local\Programs\Python\Python312;C:\Users\Maple\.local\bin;C:\Users\Maple\AppData\Local\Programs\Microsoft VS Code\bin;C:\Users\Maple\AppData\Loca' FAKE_RUN=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/run COMPAT_FS_ROOT=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_product_build_prop/root
+++ sh /d/Maple_Workflow/MapleSU/dist-repo/TEESimulator-MapleSU/module/core/compat.sh --json
++ OUT='{"ok":true,"time":1795169366,"counts":{"ok":8,"info":4,"warn":1,"error":0},"items":[{"level":"ok","key":"android_ok","a":"36","b":"","c":""},{"level":"ok","key":"arch_ok","a":"arm64-v8a","b":"","c":""},{"level":"info","key":"root","a":"KernelSU","b":"","c":""},{"level":"ok","key":"selinux_ok","a":"","b":"","c":""},{"level":"ok","key":"conflict_none","a":"","b":"","c":""},{"level":"ok","key":"props_clean","a":"","b":"","c":""},{"level":"warn","key":"keybox_unknown","a":"","b":"","c":""},{"level":"info","key":"keybox_no_rsa","a":"","b":"","c":""},{"level":"info","key":"rkp_blocked","a":"remoteprovisioning.googleapis.com","b":"","c":""},{"level":"ok","key":"soter_ok","a":"","b":"","c":""},{"level":"ok","key":"daemon_ok","a":"","b":"","c":""},{"level":"ok","key":"inject_ok","a":"","b":"","c":""},{"level":"info","key":"soter_idle","a":"","b":"","c":""}]}'
++ hasnt 'native pki in my_product/build.prop' pki_prop
++ grep -q '"key":"pki_prop"'
++ r=0
++ check 'native pki in my_product/build.prop (did not want pki_prop)' 0
++ '[' 0 = 0 ']'
++ PASS=33
++ hasnt 'native pki in my_product/build.prop: nothing changed' props_changed
++ grep -q '"key":"props_changed"'
++ r=0
++ check 'native pki in my_product/build.prop: nothing changed (did not want props_changed)' 0
++ '[' 0 = 0 ']'
++ PASS=34
++ for f in my_product/build.prop my_manifest/build.prop odm/build.prop odm/etc/build.prop odm/etc/build_sku1.prop vendor/odm/etc/build.prop vendor/default.prop product/etc/build.prop mi_ext/etc/build.prop
+++ echo $'$f\023'
+++ tr /. __
++ setup native_pki_my_manifest_build_prop 200
++ S=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop
++ R=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/root
++ mkdir -p C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/bin C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/run C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/root/data/adb/modules C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/root/data/adb/ksu C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/root/data/adb/tricky_store C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/root/vendor C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/root/system C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/root/proc/20
++ cat
++ cat
++ printf '#!/bin/sh\necho Enforcing\n'
++ printf '#!/bin/sh\necho package:/x.apk\n'
++ cat
++ printf '#!/bin/sh\necho "$*" > "$FAKE_RUN/nc.args"\nexit "${FAKE_NC_RC:-1}"\n'
++ cat
++ printf '#!/bin/sh\ncat "$FAKE_RUN/logcat" 2>/dev/null\nexit 0\n'
++ chmod +x C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/bin/getenforce C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/bin/getprop C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/bin/logcat C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/bin/nc C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/bin/pidof C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/bin/pm C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/bin/timeout
++ printf 'ro.product.first_api_level=34\nro.product.vendor.model=OPD2401\n'
++ printf 'ro.build.version.security_patch=2025-10-01\n'
++ echo '<AndroidAttestation><Key algorithm="ecdsa"><CertificateChain><Certificate format="pem">'
++ make_cert 200
++ python3 -I - 200
++ echo '</Certificate></CertificateChain></Key></AndroidAttestation>'
++ echo '7f00-7f01 r-xp 00000000 fd:01 12 /data/adb/modules/tricky_store/libTEESimulator.so'
++ native my_manifest/build.prop ro.vendor.oplus.provision.pki=11
+++ dirname C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/root/my_manifest/build.prop
++ mkdir -p C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/root/my_manifest
++ printf '%s\n' ro.vendor.oplus.provision.pki=11
++ module some_mod
++ M=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/root/data/adb/modules/some_mod
++ mkdir -p C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/root/data/adb/modules/some_mod
++ printf 'id=%s\nname=%s\n' some_mod some_mod
++ printf 'ro.vendor.oplus.provision.pki=11\n'
+++ run --json
+++ PATH='C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/bin:C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\usr/local/bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\usr/bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd\bin;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\winuxcmd;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701;C:\Users\Maple\.dsh\dsh-ops\shells\niubash-prepared\e3765d439d5d873f50e910706e380ece9fa29d6349c02cf383cb54aeae4e4701\bin;C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Users\Maple\AppData\Local\Microsoft\WindowsApps;C:\Program Files\Git\cmd;C:\Program Files\GitHub CLI\;C:\Program Files\Go\bin;C:\Program Files\Eclipse Adoptium\jdk-17.0.10.7-hotspot\bin;C:\Python314;C:\Python314\Scripts;C:\msys64\mingw64\bin;D:\platform-tools;C:\Program Files\MySQL\MySQL Server 8.0\bin;C:\Program Files\NVIDIA Corporation\NVIDIA App\NvDLISR;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\dotnet\;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\PowerShell\7\;C:\Program Files\Microsoft\jdk-21.0.12.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Users\Maple\AppData\Local\Microsoft\WindowsApps;C:\Program Files\Git\cmd;C:\Program Files\GitHub CLI;C:\Program Files\Go\bin;C:\Program Files\Eclipse Adoptium\jdk-17.0.10.7-hotspot\bin;C:\Python314;C:\Python314\Scripts;C:\msys64\mingw64\bin;D:\platform-tools;C:\Program Files\MySQL\MySQL Server 8.0\bin;C:\Program Files\NVIDIA Corporation\NVIDIA App\NvDLISR;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\dotnet;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\PowerShell\7;C:\Users\Maple\AppData\Local\Programs\Python\Python312\Scripts;C:\Users\Maple\AppData\Local\Programs\Python\Python312;C:\Users\Maple\.local\bin;C:\Users\Maple\AppData\Local\Programs\Microsoft VS Code\bin;C:\Users\Maple\AppData\Loca' FAKE_RUN=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/run COMPAT_FS_ROOT=C:/Users/Maple/AppData/Local/Temp/tmp.g0z7eg59jn/native_pki_my_manifest_build_prop/root
+++ sh /d/Maple_Workflow/MapleSU/dist-repo/TEESimulator-MapleSU/module/core/compat.sh --json

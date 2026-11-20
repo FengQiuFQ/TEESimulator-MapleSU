@@ -8,6 +8,11 @@
 - 同一套规则也能认出名字不叫 TrickyStore / TEESimulator、但同样注入 keystore2 的模块（带注入器，且脚本或库里指向 keystore2）。两者同时启用时本模块让出并记录 `conflict=<id>`，兼容性检查报同一个模块。只给其他进程注入的模块不算。
 - 没有 module.prop 的模块目录不会被加载，兼容性检查把它报为残留，开机检测也不再算它。
 
+## v6.0.41 — 2026-11-20
+
+- 合并 PR #4：开机冲突检测改由 `core/compat.sh --conflicts` 判定，按模块实际携带的注入库/面向 keystore2 的注入器识别，不再看 `module.prop` 描述；没有 `module.prop` 的目录不算加载。
+- 复审修复：注入器扫描只看注入器本身与 `*.so`/`*inject*` 文件（限 16MB），不再 grep 整棵树；带 `inject` 且描述里提到 keystore2、或 service 里重启 keystore2 的管理器不会再误判。
+
 ## v6.0.40 — 2026-11-14
 
 - 修复 6.0.39 的 dex 校验失败：用量门禁在汇合点把 v1 同时当 String/boolean，且调用点覆盖了仍保存 `this` 的 v0；改为 v1 存 alias、v3 存结果、v8 传参。
